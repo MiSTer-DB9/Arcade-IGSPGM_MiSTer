@@ -42,9 +42,7 @@ mister/%: releases/% deploy.done
 	ssh $(MISTER) "echo 'load_core _Development/$(notdir $<)' > /dev/MiSTer_cmd"
 
 mister: mister/PGM.mra
-mister/finalb: mister/Final\ Blow\ (World).mra
-mister/dinorex: mister/Dino\ Rex\ (World).mra
-mister/qjinsei: mister/Quiz\ Jinsei\ Gekijoh\ (Japan).mra
+mister/espgalbl: mister/espgalbl.mra
 
 
 rbf: $(OUTDIR)/$(CONFIG).rbf

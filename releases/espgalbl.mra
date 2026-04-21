@@ -46,19 +46,19 @@
 	
         <!-- CART TILE -->
         <part>04 00800000 00180000</part>
-        <part name="t04801w064.u19" crc="6021c79e" />
+        <part name="cave_t04801w064.u19" crc="6021c79e" />
 
         <!-- CART MUSIC -->
         <part>05 00400000 00400000</part>
-    	<part name="w04801b032.u17" crc="60298536" />
+    	<part name="cave_w04801b032.u17" crc="60298536" />
       
         <!-- A ROM -->
         <part>06 01000000 00000000</part>
-	    <part name="a04801w064.u7" crc="26dd4932" />
-	    <part name="a04802w064.u8" crc="0e6bf7a9" />
+	    <part name="cave_a04801w064.u7" crc="26dd4932" />
+	    <part name="cave_a04802w064.u8" crc="0e6bf7a9" />
         
         <!-- B ROM -->
         <part>07 00800000 00000000</part>
-	    <part name="b04801w064.u1" crc="98dce13a"/>
+	    <part name="cave_b04801w064.u1" crc="98dce13a"/>
 	</rom>
 </misterromdescription>
