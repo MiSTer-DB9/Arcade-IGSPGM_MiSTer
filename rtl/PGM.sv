@@ -52,8 +52,6 @@ module PGM(
 
     ddr_if.to_host    ddr,
 
-    input      [12:0] obj_debug_idx,
-
     output     [15:0] audio_out,
     input       [1:0] audio_filter_en,
 
@@ -101,15 +99,14 @@ wire ce_50m = 1;
 wire        cpu_rw, cpu_as_n;
 wire [1:0]  cpu_ds_n;
 wire [2:0]  cpu_fc;
+wire        cpu_bg_n;
+wire        cpu_br_n;
+wire        cpu_bgack_n;
 wire [15:0] cpu_data_in, cpu_data_out;
 wire [22:0] cpu_addr;
 wire [23:0] cpu_word_addr /* verilator public_flat */ = { cpu_addr, 1'b0 };
 wire IACKn = ~&cpu_fc;
 /////////////////////////////
-
-
-assign sdr_sprite_addr = 0;
-assign sdr_sprite_req = 0;
 
 
 logic SS_SAVEn, SS_RESETn, SS_VECn;
@@ -345,7 +342,6 @@ end
 //// CHIP SELECTS
 
 logic ROMn;
-logic PROGn;
 logic WORKRAMn;
 logic IGS023n;
 logic IGS026_Xn;
@@ -433,11 +429,11 @@ fx68k m68000(
     .E(), .VMAn(),
 
     .FC0(cpu_fc[0]), .FC1(cpu_fc[1]), .FC2(cpu_fc[2]),
-    .BGn(),
+    .BGn(cpu_bg_n),
     .oRESETn(), .oHALTEDn(),
     .DTACKn(DTACKn), .VPAn(IACKn),
     .BERRn(1),
-    .BRn(1), .BGACKn(1),
+    .BRn(cpu_br_n), .BGACKn(cpu_bgack_n),
     .IPL0n(IPLn[0]), .IPL1n(IPLn[1]), .IPL2n(IPLn[2]),
     .iEdb(cpu_data_in), .oEdb(cpu_data_out),
     .eab(cpu_addr)
@@ -494,6 +490,8 @@ wire [15:0] workram_addr;
 wire workram_lds_n, workram_uds_n;
 wire [15:0] workram_data, workram_q;
 
+wire workram_dma = ~cpu_bgack_n;
+
 m68k_ram #(.WIDTHAD(16)) work_ram(
     .clock(clk),
     .address(workram_addr),
@@ -505,9 +503,9 @@ m68k_ram #(.WIDTHAD(16)) work_ram(
 
 m68k_ram_ss_adaptor #(.WIDTHAD(16), .SS_IDX(SSIDX_WORK_RAM)) workram_ss(
     .clk,
-    .addr_in(cpu_addr[15:0]),
-    .lds_n_in(WORKRAMn | cpu_ds_n[0] | cpu_rw),
-    .uds_n_in(WORKRAMn | cpu_ds_n[1] | cpu_rw),
+    .addr_in(workram_dma ? igs023_dma_addr : cpu_addr[15:0]),
+    .lds_n_in(workram_dma ? 1 : WORKRAMn | cpu_ds_n[0] | cpu_rw),
+    .uds_n_in(workram_dma ? 1 : WORKRAMn | cpu_ds_n[1] | cpu_rw),
     .data_in(cpu_data_out),
 
     .q(workram_q),
@@ -551,7 +549,7 @@ m68k_ram_ss_adaptor #(.WIDTHAD(15), .SS_IDX(SSIDX_Z80_RAM)) aram_ss(
 );
 
 
-wire [14:0] pal_addr;
+wire [11:0] pal_addr;
 wire pal_lds_n, pal_uds_n;
 wire [15:0] pal_data;
 
@@ -622,9 +620,15 @@ assign green = { igs023_color[9:5], igs023_color[9:7] };
 assign blue = { igs023_color[4:0], igs023_color[4:2] };
 
 wire [23:0] igs023_sdr_tile_addr;
+wire [23:0] igs023_sdr_sprite_addr;
+wire [15:0] igs023_dma_addr;
 assign sdr_tile_addr = (cart_present && (igs023_sdr_tile_addr >= cart_tile_base))
                         ? CART_TILE_ROM_SDR_BASE[26:0] + { 3'd0, igs023_sdr_tile_addr - cart_tile_base }
                         : BIOS_TILE_ROM_SDR_BASE[26:0] + { 3'd0, igs023_sdr_tile_addr };
+
+assign sdr_sprite_addr = CART_B_ROM_SDR_BASE[26:0] + { 3'd0, igs023_sdr_sprite_addr };
+
+
 
 IGS023 #(.SS_IDX(SSIDX_IGS023)) igs023(
     .clk,
@@ -644,6 +648,15 @@ IGS023 #(.SS_IDX(SSIDX_IGS023)) igs023(
     .cpu_cs_n(IGS023n),
     .cpu_dtack_n(igs023_dtack_n),
 
+    .cpu_br_n(cpu_br_n),
+    .cpu_bgack_n(cpu_bgack_n),
+    .cpu_bg_n(cpu_bg_n),
+    .cpu_as_n(cpu_as_n),
+    .cpu_dtack_in_n(DTACKn),
+
+    .dma_addr(igs023_dma_addr),
+    .dma_din(workram_q),
+
     // VRAM interface
     .vram_addr(igs023_vram_addr),
     .vram_din(igs023_vram_q),
@@ -661,6 +674,12 @@ IGS023 #(.SS_IDX(SSIDX_IGS023)) igs023(
     .tile_rom_data(sdr_tile_q),
     .tile_rom_req(sdr_tile_req),
     .tile_rom_ack(sdr_tile_ack),
+
+    .sprite_brom_address(igs023_sdr_sprite_addr),
+    .sprite_brom_data(sdr_sprite_q),
+    .sprite_brom_req(sdr_sprite_req),
+    .sprite_brom_ack(sdr_sprite_ack),
+
 
     .irq6(irq6),
     .irq4(irq4),

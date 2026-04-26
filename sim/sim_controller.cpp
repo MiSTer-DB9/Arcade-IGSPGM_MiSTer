@@ -122,7 +122,6 @@ ControllerResult<EmptyResult> SimController::Initialize(bool headless)
 
     gSimCore.mTop->ss_do_save = 0;
     gSimCore.mTop->ss_do_restore = 0;
-    gSimCore.mTop->obj_debug_idx = -1;
     gSimCore.mTop->joystick_p1 = 0;
     gSimCore.mTop->joystick_p2 = 0;
 

@@ -192,8 +192,11 @@ static void LoadPgm()
 static void LoadPgmTest()
 {
     gFileSearch.AddSearchPath("../testroms/build/pgm_test/pgm/");
+    gFileSearch.AddSearchPath("../roms/kov.zip");
+    gFileSearch.AddSearchPath("../roms/kovsh.zip");
     LoadBasePgmBios();
     ClearCartConfig();
+    gSimCore.mSDRAM->LoadData("pgm_b0600.u6", CART_B_ROM_SDR_BASE, 1);
     gLoadedGameShortName = "pgm_test";
     gSimCore.SetGame(GAME_PGM_TEST);
 }
@@ -221,6 +224,7 @@ static void LoadEspgalbl()
 
     gSimCore.mSDRAM->LoadData16be("espgaluda_u8.bin", CART_PROG_ROM_SDR_BASE, 2);
     gSimCore.mSDRAM->LoadData("cave_t04801w064.u19", CART_TILE_ROM_SDR_BASE, 1);
+    gSimCore.mSDRAM->LoadData("cave_b04801w064.u1", CART_B_ROM_SDR_BASE, 1);
 
     gSimCore.mTop->rootp->sim_top__DOT__cart_present = 1;
     gSimCore.mTop->rootp->sim_top__DOT__cart_prog_base = 0;

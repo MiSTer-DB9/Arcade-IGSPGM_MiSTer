@@ -56,8 +56,6 @@ module sim_top(
     input       [7:0] ioctl_dout,
     output            ioctl_wait,
 
-    input      [12:0] obj_debug_idx,
-
     output     [15:0] audio_out,
     input       [1:0] audio_filter_en,
 
@@ -262,8 +260,6 @@ PGM pgm_inst(
     
     .ddr(ddr_pgm),
     
-    .obj_debug_idx(obj_debug_idx),
-
     .audio_out(audio_out),
     .audio_filter_en(audio_filter_en),
     

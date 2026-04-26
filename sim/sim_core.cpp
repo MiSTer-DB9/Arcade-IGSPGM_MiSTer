@@ -79,6 +79,7 @@ void SimCore::Init()
     SetMemory(MemoryRegion::BIOS_MUSIC_ROM, std::make_unique<MemorySlice>(*mSDRAM, BIOS_MUSIC_ROM_SDR_BASE, 2 * 1024 * 1024));
     SetMemory(MemoryRegion::CART_TILE_ROM, std::make_unique<MemorySlice>(*mSDRAM, CART_TILE_ROM_SDR_BASE, 32 * 1024 * 1024));
     SetMemory(MemoryRegion::CART_MUSIC_ROM, std::make_unique<MemorySlice>(*mSDRAM, CART_MUSIC_ROM_SDR_BASE, 32 * 1024 * 1024));
+    SetMemory(MemoryRegion::CART_B_ROM, std::make_unique<MemorySlice>(*mSDRAM, CART_B_ROM_SDR_BASE, 64 * 1024 * 1024));
 
     // Initialize M68K CPU wrapper
     mCPU = std::make_unique<M68K>();

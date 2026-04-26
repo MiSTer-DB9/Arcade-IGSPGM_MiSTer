@@ -613,6 +613,7 @@ class ROMWindow : public Window
         mTabs.emplace_back("CART/PROG", gSimCore.Memory(MemoryRegion::CART_PROG_ROM));
         mTabs.emplace_back("CART/TILE", gSimCore.Memory(MemoryRegion::CART_TILE_ROM));
         mTabs.emplace_back("CART/MUSIC", gSimCore.Memory(MemoryRegion::CART_MUSIC_ROM));
+        mTabs.emplace_back("CART/B_ROM", gSimCore.Memory(MemoryRegion::CART_B_ROM));
     }
 
     void Draw()

@@ -235,7 +235,7 @@ always_ff @(posedge clk) begin
 
             APPLY_SCROLL: begin
                 pixel_out_idx <= { 4'd1, scrolled_x[4:0] };
-                scale_shifter_x <= scale_bits_x;
+                scale_shifter_x <= 0; //scale_bits_x;
                 pixel_in_idx <= 0;
                 vram_row_addr <= { 1'b0, y[10:5] };
                 tile_addr <= {scrolled_x[10:5], 2'b00};

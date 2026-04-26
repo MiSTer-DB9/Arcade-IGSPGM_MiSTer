@@ -15,6 +15,15 @@ module IGS023 #(parameter SS_IDX=-1) (
     input cpu_rw,
     input cpu_cs_n,
     output cpu_dtack_n,
+    input cpu_dtack_in_n,
+
+    output cpu_br_n,
+    output cpu_bgack_n,
+    input cpu_bg_n,
+    input cpu_as_n,
+
+    output reg [15:0] dma_addr,
+    input [15:0] dma_din,
 
     // VRAM interface
     output logic [14:0] vram_addr,
@@ -34,6 +43,12 @@ module IGS023 #(parameter SS_IDX=-1) (
     input      [31:0] tile_rom_data,
     output reg        tile_rom_req,
     input             tile_rom_ack,
+
+    output reg [23:0] sprite_brom_address,
+    input      [63:0] sprite_brom_data,
+    output reg        sprite_brom_req,
+    input             sprite_brom_ack,
+
 
     output reg        irq6,
     output reg        irq4,
@@ -79,14 +94,16 @@ reg [1:0] ram_access = 0;
 reg [15:0] sprite_data[256 * 8];
 reg [15:0] zoom_table[32];
 reg [15:0] ctrl[16];
+reg dma_start;
 
 wire [15:0] bg_x = ctrl[3];
 wire [15:0] bg_y = ctrl[2];
 wire [15:0] fg_x = ctrl[6];
 wire [15:0] fg_y = ctrl[5];
 wire [15:0] ctrl_flags = ctrl[14];
-wire bg_en = ~ctrl_flags[12];
-wire fg_en = ~ctrl_flags[11];
+wire bg_en = 1; // ~ctrl_flags[12];
+wire fg_en = 1; // ~ctrl_flags[11];
+wire dma_en = ctrl_flags[0];
 
 assign cpu_dtack_n = cpu_cs_n ? 0 : dtack_n;
 
@@ -98,8 +115,7 @@ reg [8:0] vcnt;
 reg [9:0] hcnt;
 
 // 0 is the top/right of the screen
-wire [10:0] logical_vcnt = { 2'b0, vcnt } - 11'd38;
-
+wire [10:0] logical_vcnt = { 2'b0, vcnt } - 38;
 
 wire hsync = (hcnt >= 63 && hcnt < (63 + 63));
 wire hblank = hcnt < 192;
@@ -150,6 +166,8 @@ reg   [7:0] fg_read_y;
 reg         bg_start_read;
 reg  [10:0] bg_read_y;
 
+wire [11:0]  sprite_color;
+
 IGS023_FG fg(
     .clk,
     .ce_33m,
@@ -191,6 +209,32 @@ IGS023_BG bg(
     .rom_ack(tile_rom_ack)
 );
 
+reg sprite_frame_reset;
+reg sprite_next_line;
+
+IGS023_Sprite sprite(
+    .clk(clk),
+    .ce_pixel(ce_pixel),
+    .frame_reset(sprite_frame_reset),
+    .scan_active(~(vblank | hblank)),
+    .next_line(sprite_next_line),
+
+    .reset(reset),
+    .dma_start(dma_start),
+    .color_out(sprite_color),
+    .cpu_br_n,
+    .cpu_bgack_n,
+    .cpu_bg_n,
+    .cpu_as_n,
+    .cpu_dtack_n(cpu_dtack_in_n),
+    .dma_addr(dma_addr),
+    .dma_din(dma_din),
+    .brom_address(sprite_brom_address),
+    .brom_data(sprite_brom_data),
+    .brom_req(sprite_brom_req),
+    .brom_ack(sprite_brom_ack)
+);
+
 reg [12:0] color_addr;
 
 reg hblank2, vblank2, hsync2, vsync2;
@@ -201,12 +245,14 @@ always_ff @(posedge clk) begin
         vblank2 <= vblank; vid_vblank <= vblank2;
         hsync2 <= hsync; vid_hsync <= hsync2;
         hblank2 <= hblank; vid_hblank <= hblank2;
-        if (~&fg_color[3:0])
+        if (~&fg_color[3:0] & fg_en)
             color_addr <= 13'h1000 + { 3'd0, fg_color[8:0], 1'b0 };
-        else if (~&bg_color[4:0])
+        else if (sprite_color[11]) begin
+            color_addr <= 13'h0000 + { 2'd0, sprite_color[9:0], 1'b0 };
+        end else if (~&bg_color[4:0] & bg_en)
             color_addr <= 13'h0800 + { 2'd0, bg_color[9:0], 1'b0 };
         else
-            color_addr <= 13'h07fe;
+            color_addr <= 13'h07fe; // this seems to be the background color?
     end
 end
 
@@ -246,10 +292,15 @@ always @(posedge clk) begin
         dtack_n <= 1;
         ram_pending <= 0;
         ram_access <= 0;
+        dma_start <= 0;
         irq6 <= 0;
         irq4 <= 0;
     end begin
-       
+        dma_start <= 0;
+        
+        sprite_frame_reset <= 0;
+        sprite_next_line <= 0;
+
         // IRQ Generation
         vblank_prev <= vblank;
         hsync_prev <= hsync;
@@ -268,7 +319,13 @@ always @(posedge clk) begin
         if (~vblank & vblank_prev) begin
             ctrl[7] <= 0;
         end else if (hsync & ~hsync_prev) begin
+            sprite_next_line <= ~vblank;
+
             ctrl[7] <= ctrl[7] + 1;
+
+            if (ctrl[7] == 221 && dma_en) begin
+                dma_start <= 1;
+            end
 
             if (irq4_cnt == 61) begin
                 if (irq4_en) irq4 <= 1;
@@ -276,6 +333,10 @@ always @(posedge clk) begin
             end else begin
                 irq4_cnt <= irq4_cnt + 1;
             end
+        end
+
+        if (vblank & ~vblank_prev) begin
+            sprite_frame_reset <= 1;
         end
 
         // CPU interface handling
@@ -356,7 +417,6 @@ always @(posedge clk) begin
         end
     end
 end
-
 
 endmodule
 

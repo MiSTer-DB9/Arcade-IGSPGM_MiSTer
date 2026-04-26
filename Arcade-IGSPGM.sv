@@ -736,8 +736,6 @@ PGM pgm_inst(
 
     .ddr(ddr_f2),
 
-    .obj_debug_idx(13'h1fff),
-
     .ss_index(ss_slot),
     .ss_do_save(ss_save),
     .ss_do_restore(ss_load),
