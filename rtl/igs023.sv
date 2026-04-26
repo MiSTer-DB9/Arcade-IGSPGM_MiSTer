@@ -49,6 +49,7 @@ module IGS023 #(parameter SS_IDX=-1) (
     output reg        sprite_brom_req,
     input             sprite_brom_ack,
 
+    ddr_if.to_host    ddr,
 
     output reg        irq6,
     output reg        irq4,
@@ -232,7 +233,8 @@ IGS023_Sprite sprite(
     .brom_address(sprite_brom_address),
     .brom_data(sprite_brom_data),
     .brom_req(sprite_brom_req),
-    .brom_ack(sprite_brom_ack)
+    .brom_ack(sprite_brom_ack),
+    .ddr(ddr)
 );
 
 reg [12:0] color_addr;

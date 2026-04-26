@@ -83,6 +83,12 @@ package system_consts;
         bit [7:0] unused;
     } board_cfg_t;
 
+    typedef struct packed
+    {
+        bit [23:0] words;
+        bit [1:0]  sub;
+    } arom_offset_t;
+
 endpackage
 
 

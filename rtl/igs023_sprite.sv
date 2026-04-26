@@ -1,3 +1,5 @@
+import system_consts::arom_offset_t;
+
 module IGS023_Sprite(
     input clk,
     input ce_pixel,
@@ -24,7 +26,9 @@ module IGS023_Sprite(
     output reg [23:0] brom_address,
     input      [63:0] brom_data,
     output reg        brom_req,
-    input             brom_ack
+    input             brom_ack,
+    
+    ddr_if.to_host    ddr
 );
 
 reg [22:0] brom_word_address;
@@ -66,7 +70,7 @@ typedef struct
 {
     bit [63:0] brom_cache;
     bit [15:0] brom_offset;
-    bit [23:0] arom_offset;
+    arom_offset_t arom_offset;
     bit [10:0] line;
     bit        active;
 } volatile_sprite_state_t;
@@ -110,12 +114,26 @@ begin
 end
 endfunction
 
+function automatic arom_offset_t add_offset(input arom_offset_t a, input [4:0] b);
+begin
+    bit [2:0] sum3 = { 1'b0, a[1:0] } + { 1'b0, b[1:0] };
+    if (sum3 > 2) begin
+        add_offset.words = a.words + { 21'd0, b[4:2] } + 1;
+        sum3 = sum3 - 3'd3;
+        add_offset.sub = sum3[1:0];
+    end else begin
+        add_offset.words = a.words + { 21'd0, b[4:2] };
+        add_offset.sub[1:0] = sum3[1:0];
+    end
+end
+endfunction
 
 reg pixel_wr = 0;
 reg [10:0] pixel_column;
 reg [10:0] pixel_next;
 reg [10:0] pixel_color;
 reg [7:0] draw_line;
+arom_offset_t pixel_offset;
 wire line_writable;
 
 // tmp_* are temporary
@@ -229,7 +247,8 @@ always_ff @(posedge clk) begin
                     spr.brom_cache <= brom_data;
                     dma_state <= PRESCAN_SCAN_TO_START;
                     spr.brom_offset <= 2;
-                    spr.arom_offset <= 0;
+                    spr.arom_offset.sub <= 0;
+                    spr.arom_offset.words <= brom_data[25:2];
                     spr.active <= 1;
                 end
             end
@@ -238,7 +257,7 @@ always_ff @(posedge clk) begin
                 if (~spr.line[10]) begin // if y position is no long negative we are good
                     dma_state <= PRESCAN_NEXT;
                 end else begin
-                    spr.arom_offset <= spr.arom_offset + count_zeros16(spr_brom_data);
+                    spr.arom_offset <= add_offset(spr.arom_offset, count_zeros16(spr_brom_data));
                     spr.brom_offset <= spr.brom_offset + 1;
                     tmp_x <= tmp_x + 1;
                     if (spr.brom_offset[1:0] == 2'b11) begin
@@ -322,8 +341,9 @@ always_ff @(posedge clk) begin
             DRAW_SPAN: begin
                 if (~tmp_shifter[0]) begin
                     pixel_color <= { spr_prio, spr_palette, 5'b0 };
+                    pixel_offset <= spr.arom_offset;
                     pixel_wr <= 1;
-                    spr.arom_offset <= spr.arom_offset + 1;
+                    spr.arom_offset <= add_offset(spr.arom_offset, 1);
                 end
                 
                 pixel_next <= pixel_next + 1;
@@ -379,9 +399,13 @@ IGS023_Buffer line_buffer(
 
     .wr(pixel_wr),
     .column(pixel_column[8:0]),
-    .color(pixel_color),
+    .prio(pixel_color[10]),
+    .palette(pixel_color[9:5]),
+    .arom_offset(pixel_offset),
     .line(draw_line),
-    .line_writable
+    .line_writable,
+
+    .ddr(ddr)
 );
 
 

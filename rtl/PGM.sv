@@ -76,13 +76,13 @@ module PGM(
 
 wire clk = clk_50m;
 
-ddr_if ddr_ss(), ddr_obj();
+ddr_if ddr_ss(), ddr_arom();
 
 ddr_mux ddr_mux(
     .clk,
     .x(ddr),
     .a(ddr_ss),
-    .b(ddr_obj)
+    .b(ddr_arom)
 );
 
 /////////////////////////////
@@ -680,6 +680,7 @@ IGS023 #(.SS_IDX(SSIDX_IGS023)) igs023(
     .sprite_brom_req(sdr_sprite_req),
     .sprite_brom_ack(sdr_sprite_ack),
 
+    .ddr(ddr_arom),
 
     .irq6(irq6),
     .irq4(irq4),

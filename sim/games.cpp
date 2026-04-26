@@ -197,6 +197,9 @@ static void LoadPgmTest()
     LoadBasePgmBios();
     ClearCartConfig();
     gSimCore.mSDRAM->LoadData("pgm_b0600.u6", CART_B_ROM_SDR_BASE, 1);
+    gSimCore.mDDRMemory->LoadData("pgm_a0600.u1", CART_A_ROM_DDR_BASE, 1);
+    gSimCore.mDDRMemory->LoadData("pgm_a0601.u3", CART_A_ROM_DDR_BASE + 0x0800000, 1);
+    gSimCore.mDDRMemory->LoadData("pgm_a0602.u5", CART_A_ROM_DDR_BASE + 0x1000000, 1);
     gLoadedGameShortName = "pgm_test";
     gSimCore.SetGame(GAME_PGM_TEST);
 }
@@ -225,6 +228,8 @@ static void LoadEspgalbl()
     gSimCore.mSDRAM->LoadData16be("espgaluda_u8.bin", CART_PROG_ROM_SDR_BASE, 2);
     gSimCore.mSDRAM->LoadData("cave_t04801w064.u19", CART_TILE_ROM_SDR_BASE, 1);
     gSimCore.mSDRAM->LoadData("cave_b04801w064.u1", CART_B_ROM_SDR_BASE, 1);
+    gSimCore.mDDRMemory->LoadData("cave_a04801w064.u7", CART_A_ROM_DDR_BASE, 1);
+    gSimCore.mDDRMemory->LoadData("cave_a04802w064.u8", CART_A_ROM_DDR_BASE + 0x0800000, 1);
 
     gSimCore.mTop->rootp->sim_top__DOT__cart_present = 1;
     gSimCore.mTop->rootp->sim_top__DOT__cart_prog_base = 0;

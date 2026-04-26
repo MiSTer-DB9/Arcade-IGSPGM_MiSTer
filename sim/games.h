@@ -23,6 +23,7 @@ static const uint32_t CART_PROG_ROM_SDR_BASE   = 0x01000000;
 static const uint32_t CART_TILE_ROM_SDR_BASE   = 0x02000000;
 static const uint32_t CART_MUSIC_ROM_SDR_BASE  = 0x04000000;
 static const uint32_t CART_B_ROM_SDR_BASE      = 0x06000000;
+static const uint32_t CART_A_ROM_DDR_BASE      = 0x38000000;
 
 Game GameFind(const char *name);
 const char *GameName(Game game);
