@@ -7,16 +7,19 @@ module IGS023_Buffer(
     input scan_active,
     input frame_reset,
     input next_line,
+    input draw_complete,
 
     output logic [11:0] scan_color,
 
-    input       wr,
+    input       wr0,
+    input       wr1,
     output      ready,
     input [8:0] column,
     input [7:0] line,
     input [4:0] palette,
     input       prio,
-    input       arom_offset_t arom_offset,
+    input       arom_offset_t arom_offset0,
+    input       arom_offset_t arom_offset1,
 
 
     ddr_if.to_host ddr
@@ -37,11 +40,13 @@ end
 
 typedef struct packed
 {
-    arom_offset_t arom_offset;
-    logic                 prio;
-    logic [4:0]           palette;
-    logic [8:0]           column;
-    logic [7:0] line;
+    logic [1:0]     wr;
+    arom_offset_t   arom_offset0;
+    arom_offset_t   arom_offset1;
+    logic           prio;
+    logic [4:0]     palette;
+    logic [8:0]     column;
+    logic [7:0]     line;
 } write_entry_t;
 
 write_entry_t wq_in;
@@ -50,10 +55,12 @@ write_entry_t wq_fifo0;
 write_entry_t wq_fifo1;
 write_entry_t wq_cur;
 assign wq_in.palette = palette;
-assign wq_in.arom_offset = arom_offset;
+assign wq_in.arom_offset0 = arom_offset0;
+assign wq_in.arom_offset1 = arom_offset1;
 assign wq_in.prio = prio;
 assign wq_in.column = column;
 assign wq_in.line = line;
+assign wq_in.wr = {wr1, wr0};
 assign wq_cur = wq_fifo0;
 
 reg [13:0] write_queue_head = 0;
@@ -66,7 +73,7 @@ assign ready = (write_queue_head - write_queue_tail) < 8190;
 
 dualport_ram_unreg #(.WIDTH($bits(write_entry_t)), .WIDTHAD(13)) write_queue(
     .clock_a(clk),
-    .wren_a(wr),
+    .wren_a(wr0 | wr1),
     .address_a(write_queue_head[12:0]),
     .data_a(wq_in),
     .q_a(),
@@ -97,16 +104,16 @@ always_ff @(posedge clk) begin
 end
 
 
-typedef enum bit[0:0]
+typedef enum bit[1:0]
 {
     IDLE,
-    WAIT
+    WAIT1,
+    WAIT2
 } queue_state_t;
 
 queue_state_t queue_state = IDLE;
 
 assign ddr.write = 0;
-assign ddr.burstcnt = 1;
 assign ddr.byteenable = 8'hff;
 
 wire queue_valid = |write_queue_fifo_count;
@@ -114,17 +121,34 @@ wire queue_prefetch_busy = queue_valid || write_queue_fetch_pending || (write_qu
 assign ddr.acquire = queue_prefetch_busy || (queue_state != IDLE);
 
 reg        ddr_cache_valid = 0;
-reg [31:0] ddr_cache_addr;
-reg [63:0] ddr_cache_data;
-wire [31:0] ddr_addr = CART_A_ROM_DDR_BASE + { 7'd0, wq_cur.arom_offset.words[23:2], 3'd0 };
-wire        ddr_cache_hit = ddr_cache_valid && (ddr_addr == ddr_cache_addr);
-wire [63:0] color_source = ((queue_state == WAIT) && ~ddr.busy && ddr.rdata_ready) ? ddr.rdata : ddr_cache_data;
+reg [19:0] ddr_cache_addr[4];
+reg [63:0] ddr_cache_data[4];
 
-logic [4:0] color_value;
+function automatic [1:0] ddr_cache_slot(input arom_offset_t ofs);
+begin
+    ddr_cache_slot = ofs.words[3:2];
+end
+endfunction
 
-always_comb begin
+function automatic ddr_cache_hit(input arom_offset_t ofs);
+begin
+    ddr_cache_hit = ddr_cache_valid && (ddr_cache_addr[ddr_cache_slot(ofs)] == ofs.words[23:4]);
+end
+endfunction
+
+
+function automatic [31:0] ddr_addr(input arom_offset_t ofs);
+begin
+    ddr_addr = CART_A_ROM_DDR_BASE + { 7'd0, ofs.words[23:2], 3'd0 };
+end
+endfunction
+
+
+function automatic [4:0] color_value(input arom_offset_t ofs);
+begin
+    bit [63:0] color_source = ddr_cache_data[ddr_cache_slot(ofs)];
     color_value = 5'h1f;
-    case({wq_cur.arom_offset.words[1:0], wq_cur.arom_offset.sub[1:0]})
+    case({ofs.words[1:0], ofs.sub[1:0]})
         4'b0000: color_value = color_source[4:0];
         4'b0001: color_value = color_source[9:5];
         4'b0010: color_value = color_source[14:10];
@@ -140,11 +164,13 @@ always_comb begin
         default: color_value = 5'h1f;
     endcase
 end
+endfunction
 
-reg         line_wr;
+reg   [1:0]   line_wr;
 write_entry_t line_wr_entry;
-reg   [4:0] line_wr_color;
-
+reg   [4:0] line_wr_color0;
+reg   [4:0] line_wr_color1;
+reg         prev_draw_complete;
 always_ff @(posedge clk) begin
     logic        pop_entry;
     logic        push_entry;
@@ -152,10 +178,12 @@ always_ff @(posedge clk) begin
     write_entry_t fifo0_next;
     write_entry_t fifo1_next;
 
-    if (frame_reset) begin
+    prev_draw_complete <= draw_complete;
+    if (~draw_complete & prev_draw_complete) begin
         line_wr <= 0;
         line_wr_entry <= '0;
-        line_wr_color <= 0;
+        line_wr_color0 <= 0;
+        line_wr_color1 <= 0;
         queue_state <= IDLE;
 
         write_queue_head <= 0;
@@ -168,7 +196,7 @@ always_ff @(posedge clk) begin
         ddr.read <= 0;
         ddr.addr <= 0;
     end else begin
-        if (wr) begin
+        if (wr0 | wr1) begin
             write_queue_head <= write_queue_head + 1;
         end
 
@@ -182,31 +210,45 @@ always_ff @(posedge clk) begin
         case(queue_state)
             IDLE: begin
                 if (queue_valid & line_writable) begin
-                    if (ddr_cache_hit) begin
-                        line_wr <= 1;
+                    if (ddr_cache_hit(wq_cur.arom_offset0) && ddr_cache_hit(wq_cur.arom_offset1)) begin
+                        line_wr <= wq_cur.wr;
                         line_wr_entry <= wq_cur;
-                        line_wr_color <= color_value;
+                        line_wr_color0 <= color_value(wq_cur.arom_offset0);
+                        line_wr_color1 <= color_value(wq_cur.arom_offset1);
                         pop_entry = 1;
                     end else if (~ddr.busy) begin
                         ddr.read <= 1;
-                        ddr.addr <= ddr_addr;
-                        queue_state <= WAIT;
+                        if (ddr_addr(wq_cur.arom_offset0) == ddr_addr(wq_cur.arom_offset1)) begin
+                            ddr.addr <= ddr_addr(wq_cur.arom_offset0);
+                            ddr.burstcnt <= 1;
+                            queue_state <= WAIT1;
+                        end else if (ddr_addr(wq_cur.arom_offset0) < ddr_addr(wq_cur.arom_offset1)) begin
+                            ddr.addr <= ddr_addr(wq_cur.arom_offset0);
+                            ddr.burstcnt <= 2;
+                            queue_state <= WAIT2;
+                        end else begin
+                            ddr.addr <= ddr_addr(wq_cur.arom_offset1);
+                            ddr.burstcnt <= 2;
+                            queue_state <= WAIT2;
+                        end
                     end
                 end
             end
 
-            WAIT: begin
+            WAIT2,
+            WAIT1: begin
                 if (~ddr.busy) begin
                     ddr.read <= 0;
                     if (ddr.rdata_ready) begin
                         ddr_cache_valid <= 1;
-                        ddr_cache_addr <= ddr_addr;
-                        ddr_cache_data <= ddr.rdata;
-                        line_wr <= 1;
-                        line_wr_entry <= wq_cur;
-                        line_wr_color <= color_value;
-                        pop_entry = 1;
-                        queue_state <= IDLE;
+                        ddr_cache_addr[ddr.addr[4:3]] <= ddr.addr[24:5];
+                        ddr_cache_data[ddr.addr[4:3]] <= ddr.rdata;
+                        if (queue_state == WAIT2) begin
+                            ddr.addr <= ddr.addr + 8;
+                            queue_state <= WAIT1;
+                        end else begin
+                            queue_state <= IDLE; // retry now that the cache is updated
+                        end
                     end
                 end
             end
@@ -262,41 +304,57 @@ wire [7:0] free_line_end = scan_line + 8'(NUM_LINE_BUFFERS) - 8'd1;
 wire line_writable = (wq_cur.line >= free_line_begin) && (wq_cur.line < free_line_end);
 wire [7:0] erase_line = scan_line - 8'b1;
 
-logic [NUM_LINE_BUFFERS-1:0] buf_wr;
-logic [8:0] buf_addr[NUM_LINE_BUFFERS];
-logic [11:0] buf_data[NUM_LINE_BUFFERS];
+logic [NUM_LINE_BUFFERS-1:0] buf_wr0;
+logic [NUM_LINE_BUFFERS-1:0] buf_wr1;
+logic [8:0] buf_addr0[NUM_LINE_BUFFERS];
+logic [8:0] buf_addr1[NUM_LINE_BUFFERS];
+logic [11:0] buf_data0[NUM_LINE_BUFFERS];
+logic [11:0] buf_data1[NUM_LINE_BUFFERS];
 logic [11:0] buf_q[NUM_LINE_BUFFERS];
 
 genvar buf_i;
 generate
     for (buf_i = 0; buf_i < NUM_LINE_BUFFERS; buf_i++) begin : gen_line_buf
-        singleport_ram #(.WIDTH(12), .WIDTHAD(9)) line_buf_inst(
-            .clock(clk),
-            .wren(buf_wr[buf_i]),
-            .address(buf_addr[buf_i]),
-            .data(buf_data[buf_i]),
-            .q(buf_q[buf_i])
+        dualport_ram_unreg #(.WIDTH(12), .WIDTHAD(9)) line_buf_inst(
+            .clock_a(clk),
+            .wren_a(buf_wr0[buf_i]),
+            .address_a(buf_addr0[buf_i]),
+            .data_a(buf_data0[buf_i]),
+            .q_a(buf_q[buf_i]),
+
+            .clock_b(clk),
+            .wren_b(buf_wr1[buf_i]),
+            .address_b(buf_addr1[buf_i]),
+            .data_b(buf_data1[buf_i]),
+            .q_b()
         );
     end
 endgenerate
 
 always_comb begin
     for (int i = 0; i < NUM_LINE_BUFFERS; i++) begin
-        buf_wr[i] = 0;
-        buf_addr[i] = queue_valid ? wq_cur.column : 9'd0;
+        buf_wr0[i] = 0;
+        buf_wr1[i] = 0;
+        buf_addr0[i] = queue_valid ? wq_cur.column : 9'd0;
+        buf_addr1[i] = queue_valid ? (wq_cur.column + 1) : 9'd0;
+        buf_data0[i] = 0;
+        buf_data1[i] = 0;
     end
 
-    buf_wr[erase_line] = 1;
-    buf_data[erase_line] = 0;
-    buf_addr[erase_line] = scan_column;
+    buf_wr0[erase_line] = 1;
+    buf_data0[erase_line] = 0;
+    buf_addr0[erase_line] = scan_column;
 
-    buf_addr[scan_line] = scan_column;
+    buf_addr0[scan_line] = scan_column;
     scan_color = buf_q[scan_line];
 
-    if (line_wr) begin
-        buf_addr[line_wr_entry.line] = line_wr_entry.column;
-        buf_data[line_wr_entry.line] = { 1'b1, line_wr_entry.prio, line_wr_entry.palette, line_wr_color };
-        buf_wr[line_wr_entry.line] = 1;
+    if (|line_wr) begin
+        buf_addr0[line_wr_entry.line] = line_wr_entry.column;
+        buf_data0[line_wr_entry.line] = { 1'b1, line_wr_entry.prio, line_wr_entry.palette, line_wr_color0 };
+        buf_addr1[line_wr_entry.line] = line_wr_entry.column + 1;
+        buf_data1[line_wr_entry.line] = { 1'b1, line_wr_entry.prio, line_wr_entry.palette, line_wr_color1 };
+        buf_wr0[line_wr_entry.line] = line_wr[0];
+        buf_wr1[line_wr_entry.line] = line_wr[1];
     end
 end
 

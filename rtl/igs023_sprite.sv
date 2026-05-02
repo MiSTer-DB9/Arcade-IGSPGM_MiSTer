@@ -56,7 +56,7 @@ reg [15:0] sprite_d4[256];
 
 reg [10:0] spr_x;
 reg [4:0] spr_x_scale;
-reg [10:0] spr_y;
+reg [9:0] spr_y;
 reg [4:0] spr_y_scale;
 reg [22:0] spr_brom_addr;
 reg spr_prio;
@@ -66,12 +66,14 @@ reg spr_y_flip;
 reg [5:0] spr_width;
 reg [8:0] spr_height;
 
+wire [9:0] spr_y_end = spr_y + { 1'b0, spr_height };
+
 typedef struct
 {
     bit [63:0] brom_cache;
     bit [15:0] brom_offset;
     arom_offset_t arom_offset;
-    bit [10:0] line;
+    bit [9:0] line;
     bit        active;
 } volatile_sprite_state_t;
 
@@ -92,49 +94,73 @@ end
 wire spr_load = dma_state == PRESCAN_LOAD || dma_state == DRAW_SEARCH_ACTIVE_LOAD;
 wire spr_store = dma_state == PRESCAN_NEXT || dma_state == DRAW_ROW_END;
 
-function automatic [4:0] count_ones4(input [3:0] v);
+function automatic [4:0] count_zeros4(input [3:0] v);
 begin
    case (v)
-       4'h0: count_ones4 = 5'd0;
-       4'h1, 4'h2, 4'h4, 4'h8: count_ones4 = 5'd1;
-       4'h3, 4'h5, 4'h6, 4'h9, 4'hA, 4'hC: count_ones4 = 5'd2;
-       4'h7, 4'hB, 4'hD, 4'hE: count_ones4 = 5'd3;
-       default: count_ones4 = 5'd4; // 4'hF
+       4'h0: count_zeros4 = 5'd4;
+       4'h1, 4'h2, 4'h4, 4'h8: count_zeros4 = 5'd3;
+       4'h3, 4'h5, 4'h6, 4'h9, 4'hA, 4'hC: count_zeros4 = 5'd2;
+       4'h7, 4'hB, 4'hD, 4'hE: count_zeros4 = 5'd1;
+       default: count_zeros4 = 5'd0; // 4'hF
    endcase
 end
 endfunction
 
 function automatic [4:0] count_zeros16(input [15:0] v);
 begin
-   count_zeros16 = 5'd16
-                 - count_ones4(v[15:12])
-                 - count_ones4(v[11:8])
-                 - count_ones4(v[7:4])
-                 - count_ones4(v[3:0]);
+   count_zeros16 = count_zeros4(v[15:12])
+                 + count_zeros4(v[11:8])
+                 + count_zeros4(v[7:4])
+                 + count_zeros4(v[3:0]);
 end
 endfunction
 
 function automatic arom_offset_t add_offset(input arom_offset_t a, input [4:0] b);
 begin
-    bit [2:0] sum3 = { 1'b0, a[1:0] } + { 1'b0, b[1:0] };
+    bit [4:0] num;
+    bit [2:0] sum3;
+    case(b)
+        0:  num = { 3'd0, 2'd0 };
+        1:  num = { 3'd0, 2'd1 };
+        2:  num = { 3'd0, 2'd2 };
+        3:  num = { 3'd1, 2'd0 };
+        4:  num = { 3'd1, 2'd1 };
+        5:  num = { 3'd1, 2'd2 };
+        6:  num = { 3'd2, 2'd0 };
+        7:  num = { 3'd2, 2'd1 };
+        8:  num = { 3'd2, 2'd2 };
+        9:  num = { 3'd3, 2'd0 };
+        10: num = { 3'd3, 2'd1 };
+        11: num = { 3'd3, 2'd2 };
+        12: num = { 3'd4, 2'd0 };
+        13: num = { 3'd4, 2'd1 };
+        14: num = { 3'd4, 2'd2 };
+        15: num = { 3'd5, 2'd0 };
+        16: num = { 3'd5, 2'd1 };
+        default: num = { 3'd0, 2'd0 };
+    endcase
+
+    sum3 = { 1'b0, a[1:0] } + { 1'b0, num[1:0] };
     if (sum3 > 2) begin
-        add_offset.words = a.words + { 21'd0, b[4:2] } + 1;
+        add_offset.words = a.words + { 21'd0, num[4:2] } + 1;
         sum3 = sum3 - 3'd3;
         add_offset.sub = sum3[1:0];
     end else begin
-        add_offset.words = a.words + { 21'd0, b[4:2] };
+        add_offset.words = a.words + { 21'd0, num[4:2] };
         add_offset.sub[1:0] = sum3[1:0];
     end
 end
 endfunction
 
-reg pixel_wr = 0;
+reg pixel0_wr, pixel1_wr;
+reg pixel_prio;
+reg [4:0] pixel_palette;
 reg [10:0] pixel_column;
 reg [10:0] pixel_next;
-reg [10:0] pixel_color;
 reg [7:0] draw_line;
-arom_offset_t pixel_offset;
+arom_offset_t pixel0_offset, pixel1_offset;
 wire buffer_ready;
+reg draw_complete;
 
 // tmp_* are temporary
 // spr_* are immutable per sprite values
@@ -148,15 +174,17 @@ always_ff @(posedge clk) begin
         cpu_br_n <= 1;
         cpu_bgack_n <= 1;
         dma_state <= DMA_IDLE;
+        draw_complete <= 1;
     end else begin
-        pixel_wr <= 0;
+        pixel0_wr <= 0;
+        pixel1_wr <= 0;
 
         pixel_column <= pixel_next;
 
         if (spr_load) begin
             spr_x <= sprite_d0[sprite_index][10:0];
             spr_x_scale <= sprite_d0[sprite_index][15:11];
-            spr_y <= sprite_d1[sprite_index][10:0];
+            spr_y <= sprite_d1[sprite_index][9:0];
             spr_y_scale <= sprite_d1[sprite_index][15:11];
             spr_brom_addr <= { sprite_d2[sprite_index][6:0], sprite_d3[sprite_index] };
             spr_prio <= sprite_d2[sprite_index][7];
@@ -172,6 +200,7 @@ always_ff @(posedge clk) begin
                 
         case(dma_state)
             DMA_IDLE: begin
+                draw_complete <= 1;
                 // DMA was never triggered, skip the dma and go to prescan
                 if (frame_reset) begin
                     sprite_index <= 0;
@@ -254,7 +283,7 @@ always_ff @(posedge clk) begin
             end
 
             PRESCAN_SCAN_TO_START: begin
-                if (~spr.line[10]) begin // if y position is no long negative we are good
+                if (~spr.line[9]) begin // if y position is no long negative we are good
                     dma_state <= PRESCAN_NEXT;
                 end else begin
                     spr.arom_offset <= add_offset(spr.arom_offset, count_zeros16(spr_brom_data));
@@ -267,7 +296,7 @@ always_ff @(posedge clk) begin
                     end
 
                     if ((tmp_x + 1) == spr_width) begin
-                        if ((spr.line + 1) == (spr_y + spr_height)) begin
+                        if ((spr.line + 1) == spr_y_end) begin
                             spr.active <= 0;
                             dma_state <= PRESCAN_NEXT; // override BROM_WAIT state
                         end
@@ -294,6 +323,7 @@ always_ff @(posedge clk) begin
             DRAW_INIT: begin
                 sprite_index <= 0;
                 draw_line <= 0;
+                draw_complete <= 0;
                 dma_state <= DRAW_SEARCH_ACTIVE_LOAD;
             end
 
@@ -328,7 +358,7 @@ always_ff @(posedge clk) begin
                 dma_state <= DRAW_SPAN;
                 if (tmp_x == spr_width) begin
                     spr.line <= spr.line + 1;
-                    if ((spr.line + 1) == (spr_y + spr_height)) begin
+                    if ((spr.line + 1) == spr_y_end) begin
                         spr.active <= 0;
                     end
                     dma_state <= DRAW_ROW_END;
@@ -337,18 +367,42 @@ always_ff @(posedge clk) begin
 
             DRAW_SPAN: begin
                 if (buffer_ready) begin
-                    if (~tmp_shifter[0]) begin
-                        pixel_color <= { spr_prio, spr_palette, 5'b0 };
-                        pixel_offset <= spr.arom_offset;
-                        pixel_wr <= pixel_next < 448;
-                        spr.arom_offset <= add_offset(spr.arom_offset, 1);
-                    end
+                    pixel_prio <= spr_prio;
+                    pixel_palette <= spr_palette;
+
+                    case(tmp_shifter[1:0])
+                        2'b00: begin
+                            pixel0_offset <= spr.arom_offset;
+                            pixel0_wr <= pixel_next < 448;
+                            pixel1_offset <= add_offset(spr.arom_offset, 1);
+                            pixel1_wr <= pixel_next < 447;
+                            spr.arom_offset <= add_offset(spr.arom_offset, 2);
+                        end
+                        2'b01: begin
+                            pixel0_offset <= spr.arom_offset;
+                            pixel1_offset <= spr.arom_offset;
+                            pixel1_wr <= pixel_next < 448;
+                            pixel0_wr <= 0;
+                            spr.arom_offset <= add_offset(spr.arom_offset, 1);
+                        end
+                        2'b10: begin
+                            pixel0_offset <= spr.arom_offset;
+                            pixel1_offset <= spr.arom_offset;
+                            pixel0_wr <= pixel_next < 447;
+                            pixel1_wr <= 0;
+                            spr.arom_offset <= add_offset(spr.arom_offset, 1);
+                        end
+                        2'b11: begin
+                            pixel0_wr <= 0;
+                            pixel1_wr <= 0;
+                        end
+                    endcase
+
+                    pixel_next <= pixel_next + 2;
+                    tmp_shifter <= { 2'b0, tmp_shifter[15:2] };
+                    tmp_shift_count <= tmp_shift_count + 2;
                     
-                    pixel_next <= pixel_next + 1;
-                    tmp_shifter <= { 1'b0, tmp_shifter[15:1] };
-                    tmp_shift_count <= tmp_shift_count + 1;
-                    
-                    if (&tmp_shift_count) begin
+                    if (tmp_shift_count == 14) begin
                         spr.brom_offset <= spr.brom_offset + 1;
                         tmp_x <= tmp_x + 1;
                         if (spr.brom_offset[1:0] == 2'b11) begin
@@ -381,6 +435,7 @@ always_ff @(posedge clk) begin
 
         if (dma_start) begin
             dma_state <= DMA_BUS_REQUEST;
+            draw_complete <= 1;
             cpu_br_n <= 0;
         end
 
@@ -391,16 +446,19 @@ IGS023_Buffer line_buffer(
     .clk,
     .ce_pixel,
     .scan_active,
-    .frame_reset(dma_state == DRAW_INIT),
+    .frame_reset,
     .next_line,
+    .draw_complete,
 
     .scan_color(color_out),
 
-    .wr(pixel_wr),
+    .wr0(pixel0_wr),
+    .wr1(pixel1_wr),
     .column(pixel_column[8:0]),
-    .prio(pixel_color[10]),
-    .palette(pixel_color[9:5]),
-    .arom_offset(pixel_offset),
+    .prio(pixel_prio),
+    .palette(pixel_palette),
+    .arom_offset0(pixel0_offset),
+    .arom_offset1(pixel1_offset),
     .line(draw_line),
     .ready(buffer_ready),
 
