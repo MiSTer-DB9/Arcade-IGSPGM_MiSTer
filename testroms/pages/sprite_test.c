@@ -52,6 +52,9 @@ void SpriteEndMarker(u8 idx)
 
 static u8 sprite_x_scale = 0x10;
 static u8 sprite_y_scale = 0x10;
+static bool sprite_y_flip = false;
+static bool sprite_x_flip = false;
+
 
 void SpriteSimple(u8 idx, const SpriteDef *def, u8 color, s16 x, s16 y)
 {
@@ -69,6 +72,8 @@ void SpriteSimple(u8 idx, const SpriteDef *def, u8 color, s16 x, s16 y)
     spr->xpos = x;
     spr->ypos = y;
     spr->color = color;
+    spr->yflip = sprite_y_flip;
+    spr->xflip = sprite_x_flip;
 }
 
 static u8 mode = 0;
@@ -89,6 +94,8 @@ static void update()
     gui_begin(3, 4);
     bool changed = gui_u8("MODE", &mode, 0, 6);
     changed |= gui_u8("COUNT", &count, 1, 255);
+    changed |= gui_toggle("FLIP Y", &sprite_y_flip);
+    changed |= gui_toggle("FLIP X", &sprite_x_flip);
     changed |= gui_u8("SX", &sprite_x_scale, 0, 31);
     changed |= gui_u8("SY", &sprite_y_scale, 0, 31);
     changed |= gui_u16("Y", &sprite_y);

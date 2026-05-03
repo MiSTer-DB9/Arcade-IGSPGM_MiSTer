@@ -63,6 +63,8 @@ assign wq_in.line = line;
 assign wq_in.wr = {wr1, wr0};
 assign wq_cur = wq_fifo0;
 
+wire valid_wr = (wr0 | wr1) && (column < 448);
+
 reg [13:0] write_queue_head = 0;
 reg [13:0] write_queue_tail = 0;
 reg [13:0] write_queue_fetch = 0;
@@ -73,7 +75,7 @@ assign ready = (write_queue_head - write_queue_tail) < 8190;
 
 dualport_ram_unreg #(.WIDTH($bits(write_entry_t)), .WIDTHAD(13)) write_queue(
     .clock_a(clk),
-    .wren_a(wr0 | wr1),
+    .wren_a(valid_wr),
     .address_a(write_queue_head[12:0]),
     .data_a(wq_in),
     .q_a(),
@@ -196,7 +198,7 @@ always_ff @(posedge clk) begin
         ddr.read <= 0;
         ddr.addr <= 0;
     end else begin
-        if (wr0 | wr1) begin
+        if (valid_wr) begin
             write_queue_head <= write_queue_head + 1;
         end
 
