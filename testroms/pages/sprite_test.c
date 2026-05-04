@@ -79,6 +79,7 @@ void SpriteSimple(u8 idx, const SpriteDef *def, u8 color, s16 x, s16 y)
 static u8 mode = 0;
 static u8 count = 0;
 static u16 sprite_y = 0;
+static u16 sprite_x = 0;
 
 static void update()
 {
@@ -98,6 +99,7 @@ static void update()
     changed |= gui_toggle("FLIP X", &sprite_x_flip);
     changed |= gui_u8("SX", &sprite_x_scale, 0, 31);
     changed |= gui_u8("SY", &sprite_y_scale, 0, 31);
+    changed |= gui_u16("X", &sprite_x);
     changed |= gui_u16("Y", &sprite_y);
     gui_end();
 
@@ -108,7 +110,7 @@ static void update()
             case 0:
                 for( int i = 0; i < count; i++ )
                 {
-                    SpriteSimple(i, &box_opaque_16x16, 2 + (i % 2), i * 2, sprite_y);
+                    SpriteSimple(i, &box_opaque_16x16, 2 + (i % 2), sprite_x + (i * 2), sprite_y);
                 }
                 SpriteEndMarker(count);
                 break;
@@ -116,7 +118,7 @@ static void update()
             case 1:
                 for( int i = 0; i < count; i++ )
                 {
-                    SpriteSimple(i, &box_opaque_32x8, i % 2, i * 2, sprite_y);
+                    SpriteSimple(i, &box_opaque_32x8, i % 2, sprite_x + (i * 2), sprite_y);
                 }
                 SpriteEndMarker(count);
                 break;
@@ -124,7 +126,7 @@ static void update()
             case 2:
                 for( int i = 0; i < count; i++ )
                 {
-                    SpriteSimple(i, &box_trans_16x16, i % 2, i * 2, 50);
+                    SpriteSimple(i, &box_trans_16x16, i % 2, sprite_x + (i * 2), sprite_y);
                 }
                 SpriteSimple(count - 1, &box_opaque_16x16, 0, (count - 1) * 2, sprite_y);
                 SpriteEndMarker(count);
@@ -133,7 +135,7 @@ static void update()
             case 3:
                 for( int i = 0; i < count; i++ )
                 {
-                    SpriteSimple(i, &box_trans_32x8, i % 2, i * 8, 50);
+                    SpriteSimple(i, &box_trans_32x8, i % 2, sprite_x + (i * 8), sprite_y);
                 }
                 SpriteSimple(count - 1, &box_opaque_32x8, 0, (count - 1) * 2, sprite_y);
                 SpriteEndMarker(count);
@@ -142,7 +144,7 @@ static void update()
             case 4:
                 for( int i = 0; i < count; i++ )
                 {
-                    SpriteSimple(i, &knight_240, 0, i * 8, sprite_y);
+                    SpriteSimple(i, &knight_240, 0, sprite_x + (i * 8), sprite_y);
                 }
                 SpriteEndMarker(count);
                 break;
@@ -150,7 +152,7 @@ static void update()
             case 5:
                 for( int i = 0; i < count; i++ )
                 {
-                    SpriteSimple(i, &dude_128, 0, i * 8, sprite_y);
+                    SpriteSimple(i, &dude_128, 0, sprite_x + (i * 8), sprite_y);
                 }
                 SpriteEndMarker(count);
                 break;

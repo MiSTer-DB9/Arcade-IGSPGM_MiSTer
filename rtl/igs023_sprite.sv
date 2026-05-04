@@ -543,7 +543,7 @@ IGS023_Buffer line_buffer(
 
     .wr0(spr_x_flip ^ spr_y_flip ? pixel1_wr : pixel0_wr),
     .wr1(spr_x_flip ^ spr_y_flip ? pixel0_wr : pixel1_wr),
-    .column(pixel_column[8:0]),
+    .column(pixel_column),
     .prio(pixel_prio),
     .palette(pixel_palette),
     .arom_offset0(spr_x_flip ^ spr_y_flip ? pixel1_offset : pixel0_offset),

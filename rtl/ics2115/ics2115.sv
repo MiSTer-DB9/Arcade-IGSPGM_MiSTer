@@ -346,7 +346,11 @@ module ics2115
             case (reg_select[4:0])
                 // 0x00: Oscillator Configuration — osc_conf with state_on merged into bit 3
                 5'h00: begin
-                    reg_read_data = {voice_regs[osc_select].osc_conf | (voice_regs[osc_select].state_on ? 8'h08 : 8'h00), 8'h00};
+                    reg_read_data = {
+                        (voice_regs[osc_select].osc_conf & ~8'h08) |
+                        (voice_regs[osc_select].state_on ? 8'h08 : 8'h00),
+                        8'h00
+                    };
                 end
 
                 // 0x01: Wavesample frequency (16-bit, no shift)
@@ -390,7 +394,7 @@ module ics2115
                 // 0x0D: Volume Envelope Control — stub for T02 IRQ work
                 5'h0D: begin
                     if (vmode == 8'd0)
-                        reg_read_data = {(voice_regs[osc_select].vol_ctrl[VOL_IRQ_PEND] ? 8'h81 : 8'h01), 8'h00};
+                        reg_read_data = {(voice_regs[osc_select].vol_ctrl[VOL_IRQ] ? 8'h81 : 8'h01), 8'h00};
                     else
                         reg_read_data = {8'h01, 8'h00};
                 end
@@ -534,6 +538,7 @@ module ics2115
                              && (osc_select == seq_voice_idx)
                              && (reg_select < 8'h20)
                              && ~host_cs_n
+                             && ~host_wr_n
                              && (host_addr == 2'd2 || host_addr == 2'd3);
     assign host_ready = !host_write_collision;
     // host_irq driven by recalc_irq logic above

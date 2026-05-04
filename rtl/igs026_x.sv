@@ -52,6 +52,7 @@ wire io_access_n = cpu_cs_n | cpu_addr[16];
 wire ram_access_n = cpu_cs_n | ~cpu_addr[16];
 
 wire z80_io_access_n = z80_iorq_n;
+wire z80_ics2115_access = ~z80_io_access_n && ~(|z80_addr[11:8]) && (~z80_rd_n || ~z80_wr_n);
 
 wire [15:0] z80_ctrl = latch[4];
 wire [15:0] z80_bus_ctrl = latch[5];
@@ -73,7 +74,7 @@ always_comb begin
     aram_addr = z80_bus_disable ? cpu_addr[15:1] : z80_addr[15:1];
     aram_dout = z80_bus_disable ? cpu_din : { z80_din, z80_din };
 
-    z80_wait_n = ~z80_bus_disable;
+    z80_wait_n = ~z80_bus_disable && (!z80_ics2115_access || ics2115_ready);
 
     z80_dout = z80_addr[0] ? aram_din[7:0] : aram_din[15:8];
 

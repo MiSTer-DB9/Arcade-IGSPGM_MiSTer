@@ -14,7 +14,7 @@ module IGS023_Buffer(
     input       wr0,
     input       wr1,
     output      ready,
-    input [8:0] column,
+    input [10:0] column,
     input [7:0] line,
     input [4:0] palette,
     input       prio,
@@ -58,7 +58,7 @@ assign wq_in.palette = palette;
 assign wq_in.arom_offset0 = arom_offset0;
 assign wq_in.arom_offset1 = arom_offset1;
 assign wq_in.prio = prio;
-assign wq_in.column = column;
+assign wq_in.column = column[8:0];
 assign wq_in.line = line;
 assign wq_in.wr = {wr1, wr0};
 assign wq_cur = wq_fifo0;
