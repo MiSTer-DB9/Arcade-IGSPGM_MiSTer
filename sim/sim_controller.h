@@ -136,6 +136,69 @@ struct GuiOverrideResult
     bool mApplied = false;
 };
 
+struct Ics2115TimerState
+{
+    uint8_t mPreset = 0;
+    uint8_t mScale = 0;
+    uint32_t mCount = 0;
+    uint32_t mPeriod = 0;
+    bool mRunning = false;
+};
+
+struct Ics2115VoiceState
+{
+    uint32_t mIndex = 0;
+    uint32_t mOscAcc = 0;
+    uint16_t mOscFc = 0;
+    uint32_t mOscStart = 0;
+    uint32_t mOscEnd = 0;
+    uint8_t mOscSaddr = 0;
+    uint8_t mOscConf = 0;
+    uint8_t mOscCtl = 0;
+    uint32_t mVolAcc = 0;
+    uint32_t mVolStart = 0;
+    uint32_t mVolEnd = 0;
+    uint8_t mVolIncr = 0;
+    uint8_t mVolPan = 0;
+    uint8_t mVolCtrl = 0;
+    uint8_t mVolMode = 0;
+    bool mStateOn = false;
+    uint8_t mStateRamp = 0;
+};
+
+struct Ics2115DebugState
+{
+    uint8_t mActiveOsc = 0;
+    uint8_t mOscSelect = 0;
+    uint8_t mRegSelect = 0;
+    uint8_t mVmode = 0;
+    uint8_t mIrqPending = 0;
+    uint8_t mIrqEnabled = 0;
+    bool mIrqOn = false;
+    uint8_t mOscIrqPendingCount = 0;
+    uint8_t mVolIrqPendingCount = 0;
+    uint8_t mStateOnCount = 0;
+    uint8_t mStopCount = 0;
+    uint8_t mSeqState = 0;
+    uint8_t mSeqVoiceIdx = 0;
+    bool mSampleTick = false;
+    uint8_t mHostDout = 0;
+    bool mHostCsN = true;
+    bool mHostRdN = true;
+    bool mHostWrN = true;
+    bool mHostIrq = false;
+    bool mHostReady = true;
+    bool mResetN = true;
+    bool mRomDataValid = false;
+    uint32_t mRomAddr = 0;
+    uint16_t mRomData = 0;
+    int16_t mAudioLeft = 0;
+    int16_t mAudioRight = 0;
+    bool mAudioValid = false;
+    std::vector<Ics2115TimerState> mTimers;
+    std::vector<Ics2115VoiceState> mVoices;
+};
+
 struct StateListResult
 {
     std::vector<std::string> mStates;
@@ -213,6 +276,7 @@ class SimController
     ControllerResult<EmptyResult> StopAudioCapture();
     ControllerResult<ScreenshotResult> SaveScreenshot(const std::string &path);
     ControllerResult<GuiStateResult> GetGuiState() const;
+    ControllerResult<Ics2115DebugState> GetIcs2115DebugState() const;
     ControllerResult<GuiOverrideResult> SetGuiOverrideByIndex(uint32_t index, uint16_t value, bool pulse = false);
     ControllerResult<GuiOverrideResult> SetGuiOverrideByLabel(const std::string &label, uint16_t value, bool pulse = false);
 

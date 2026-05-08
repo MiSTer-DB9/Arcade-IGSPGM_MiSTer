@@ -69,8 +69,9 @@ Typical session:
 3. optional `sim.reset`
 4. query and control methods like `sim.run_cycles`, `cpu.get_state`, `memory.read`
 5. optional `gui.get_state`, `gui.set_override`, or `gui.press_button` when interacting with the exported TestROM GUI
-6. optional `audio_capture.start` / `audio_capture.stop` when capturing simulator audio packets
-7. `sim.shutdown` when finished
+6. optional `ics2115.get_state` when inspecting sound-chip voice/global state
+7. optional `audio_capture.start` / `audio_capture.stop` when capturing simulator audio packets
+8. `sim.shutdown` when finished
 
 ## Methods
 
@@ -687,6 +688,36 @@ Result:
 ```json
 {"path":"frame.png"}
 ```
+
+## ICS2115 debug state
+
+### `ics2115.get_state`
+
+Return the current ICS2115 state for simulator/debug tooling. The payload includes global chip state, IRQ summaries, timer state, host/ROM/audio status, and all 32 decoded voice records.
+
+Request:
+
+```json
+{"id":30,"method":"ics2115.get_state","params":{}}
+```
+
+Top-level result fields include:
+
+- `active_osc`, `osc_select`, `reg_select`, `vmode`
+- `irq_pending`, `irq_enabled`, `irq_on`
+- `osc_irq_pending_count`, `vol_irq_pending_count`, `state_on_count`, `stop_count`
+- `seq_state`, `seq_voice_idx`, `sample_tick`
+- `host` object: `dout`, `cs_n`, `rd_n`, `wr_n`, `irq`, `ready`, `reset_n`
+- `rom` object: `addr`, `data`, `data_valid`
+- `audio` object: `left`, `right`, `valid`
+- `timers` array with two timer records
+- `voices` array with 32 voice records
+
+Each voice record includes:
+
+- oscillator fields: `osc_acc`, `osc_fc`, `osc_start`, `osc_end`, `osc_saddr`, `osc_conf`, `osc_ctl`
+- volume fields: `vol_acc`, `vol_start`, `vol_end`, `vol_incr`, `vol_pan`, `vol_ctrl`, `vol_mode`
+- runtime fields: `state_on`, `state_ramp`
 
 ## TestROM GUI mirroring
 

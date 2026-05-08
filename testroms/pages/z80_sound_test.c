@@ -196,10 +196,16 @@ static void z80_init_sound_driver(void)
 
 static void z80_send_mailbox_command(u8 b0, u8 b1, u8 b2, u8 b3)
 {
-    /* Same visible path as BIOS PumpZ80CommandQueue(): take Z80 RAM, write the
-       4-byte mailbox at Z80 0006, release RAM, then pulse sound latch 1 with
-       token 1 to trigger the Z80 NMI receive path. */
-    Z80_LATCH3 = (u16)((latch_low_shadow & 0x0f) | 0x00f0);
+    /* Same visible path as BIOS PumpZ80CommandQueue(): wait until the Z80 is
+       not advertising a busy/status high nibble of 0xf0, take Z80 RAM, write
+       the 4-byte mailbox at Z80 0006, release RAM, then pulse sound latch 1
+       with token 1 to trigger the Z80 NMI receive path. */
+    u16 latch2;
+    do
+    {
+        Z80_LATCH3 = (u16)((latch_low_shadow & 0x0f) | 0x00f0);
+        latch2 = Z80_LATCH2;
+    } while ((latch2 & 0x00f0) == 0x00f0);
 
     z80_bus_take();
     latch3_high_shadow = 0;

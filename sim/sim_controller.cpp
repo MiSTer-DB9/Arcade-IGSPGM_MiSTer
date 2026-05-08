@@ -61,6 +61,21 @@ const char *VpiTypeToKind(PLI_INT32 type)
     }
 }
 
+uint64_t GetWideBits(const VlWide<8> &wide, int lsb, int width)
+{
+    uint64_t value = 0;
+    for (int bit = 0; bit < width; bit++)
+    {
+        int absoluteBit = lsb + bit;
+        uint32_t word = wide[absoluteBit / 32];
+        if ((word >> (absoluteBit % 32)) & 1u)
+        {
+            value |= (uint64_t{1} << bit);
+        }
+    }
+    return value;
+}
+
 void CollectVpiSignalsRecursive(vpiHandle moduleHandle, std::vector<SignalInfo> &signals, std::set<std::string> &seen)
 {
     if (moduleHandle == nullptr)
@@ -722,6 +737,94 @@ ControllerResult<GuiStateResult> SimController::GetGuiState() const
     }
 
     return ControllerResult<GuiStateResult>::Success(result);
+}
+
+ControllerResult<Ics2115DebugState> SimController::GetIcs2115DebugState() const
+{
+    auto initResult = EnsureInitialized();
+    if (!initResult.ok)
+    {
+        return ControllerResult<Ics2115DebugState>::Failure(initResult.errorCode, initResult.errorMessage);
+    }
+
+    auto *root = gSimCore.mTop->rootp;
+    Ics2115DebugState result;
+    result.mActiveOsc = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__active_osc;
+    result.mOscSelect = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__osc_select;
+    result.mRegSelect = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__reg_select;
+    result.mVmode = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__vmode;
+    result.mIrqPending = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__irq_pending;
+    result.mIrqEnabled = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__irq_enabled;
+    result.mIrqOn = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__irq_on != 0;
+    result.mOscIrqPendingCount = 0;
+    result.mVolIrqPendingCount = 0;
+    result.mStateOnCount = 0;
+    result.mStopCount = 0;
+    result.mSeqState = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__seq_state;
+    result.mSeqVoiceIdx = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__seq_voice_idx;
+    result.mSampleTick = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__sample_tick != 0;
+    result.mHostDout = root->sim_top__DOT__pgm_inst__DOT__ics2115_dout;
+    result.mHostCsN = root->sim_top__DOT__pgm_inst__DOT__ics2115_cs_n != 0;
+    result.mHostRdN = root->sim_top__DOT__pgm_inst__DOT__ics2115_rd_n != 0;
+    result.mHostWrN = root->sim_top__DOT__pgm_inst__DOT__ics2115_wr_n != 0;
+    result.mHostIrq = result.mIrqOn;
+    result.mHostReady = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__host_write_collision == 0;
+    result.mResetN = root->sim_top__DOT__pgm_inst__DOT__z80_reset_n != 0;
+    result.mRomDataValid = root->sim_top__DOT__pgm_inst__DOT__ics2115_data_valid != 0;
+    result.mRomAddr = root->sim_top__DOT__pgm_inst__DOT__ics2115_rom_addr;
+    result.mRomData = root->sim_top__DOT__pgm_inst__DOT__ics2115_rom_q;
+    result.mAudioLeft = static_cast<int16_t>(root->sim_top__DOT__pgm_inst__DOT__ics2115_audio_left);
+    result.mAudioRight = static_cast<int16_t>(root->sim_top__DOT__pgm_inst__DOT__ics2115_audio_right);
+    result.mAudioValid = root->sim_top__DOT__pgm_inst__DOT__ics2115_audio_valid != 0;
+
+    result.mTimers.reserve(2);
+    for (int i = 0; i < 2; i++)
+    {
+        Ics2115TimerState timer;
+        timer.mPreset = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__timer_preset[i];
+        timer.mScale = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__timer_scale[i];
+        timer.mCount = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__timer_count[i];
+        timer.mPeriod = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__timer_period[i];
+        timer.mRunning = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__timer_running[i] != 0;
+        result.mTimers.push_back(timer);
+    }
+
+    result.mVoices.reserve(32);
+    for (int i = 0; i < 32; i++)
+    {
+        const auto &wide = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__voice_regs[i];
+        Ics2115VoiceState voice;
+        voice.mIndex = i;
+        voice.mStateRamp = GetWideBits(wide, 0, 7);
+        voice.mStateOn = GetWideBits(wide, 7, 1) != 0;
+        voice.mVolMode = GetWideBits(wide, 8, 8);
+        voice.mVolCtrl = GetWideBits(wide, 16, 8);
+        voice.mVolPan = GetWideBits(wide, 24, 8);
+        voice.mVolIncr = GetWideBits(wide, 32, 8);
+        voice.mVolEnd = GetWideBits(wide, 40, 26);
+        voice.mVolStart = GetWideBits(wide, 66, 26);
+        voice.mVolAcc = GetWideBits(wide, 92, 26);
+        voice.mOscCtl = GetWideBits(wide, 118, 8);
+        voice.mOscConf = GetWideBits(wide, 126, 8);
+        voice.mOscSaddr = GetWideBits(wide, 134, 8);
+        voice.mOscEnd = GetWideBits(wide, 142, 29);
+        voice.mOscStart = GetWideBits(wide, 171, 29);
+        voice.mOscFc = GetWideBits(wide, 200, 16);
+        voice.mOscAcc = GetWideBits(wide, 216, 29);
+
+        if (voice.mOscConf & 0x80)
+            result.mOscIrqPendingCount++;
+        if (voice.mVolCtrl & 0x80)
+            result.mVolIrqPendingCount++;
+        if (voice.mStateOn)
+            result.mStateOnCount++;
+        if (voice.mOscConf & 0x02)
+            result.mStopCount++;
+
+        result.mVoices.push_back(voice);
+    }
+
+    return ControllerResult<Ics2115DebugState>::Success(result);
 }
 
 ControllerResult<GuiOverrideResult> SimController::SetGuiOverrideByIndex(uint32_t index, uint16_t value, bool pulse)

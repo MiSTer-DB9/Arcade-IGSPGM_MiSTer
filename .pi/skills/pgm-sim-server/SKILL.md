@@ -72,6 +72,7 @@ Primary reference:
 - `gui.get_state`
 - `gui.set_override`
 - `gui.press_button`
+- `ics2115.get_state`
 - `input.set_dipswitch`
 
 Read the full method reference in [`docs/sim-server.md`](../../../docs/sim-server.md) before using less common operations or composing complex conditions.
@@ -125,6 +126,7 @@ If a request fails:
 - Keep a single long-lived simulator process per investigation when possible.
 - Use `audio_capture.start` / `audio_capture.stop` for simulator audio packet capture; do not rely on old CLI or environment-based capture control.
 - Decode simulator packet captures with `python3 utils/capture_stream.py out.wav --input capture.bin`.
+- Use `ics2115.get_state` when debugging sound-chip behavior; it returns global IRQ/timer/host/ROM/audio state plus all 32 decoded voice records.
 - For test ROMs that export `gui_data` at `WORK_RAM[0x0a00]`, use `gui.get_state` to inspect the mirrored GUI and `gui.set_override` / `gui.press_button` to interact with it.
 - The TestROM GUI snapshot is only safe when both magic words match, `count > 0`, and `lock == 0`; the simulator checks this at vblank boundaries.
 - Signal lookup first checks built-in aliases, then tries VPI hierarchical lookup.

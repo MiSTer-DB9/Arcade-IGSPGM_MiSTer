@@ -25,6 +25,8 @@ module IGS026_X(
 
     output z80_reset_n,
     output logic z80_wait_n,
+    output logic z80_busrq_n,
+    input z80_busak_n,
     output logic z80_int_n,
     output reg z80_nmi_n,
     input z80_mreq_n,
@@ -57,11 +59,12 @@ wire z80_ics2115_access = ~z80_io_access_n && ~(|z80_addr[11:8]) && (~z80_rd_n |
 wire [15:0] z80_ctrl = latch[4];
 wire [15:0] z80_bus_ctrl = latch[5];
 wire z80_bus_requested = z80_bus_ctrl == 16'h45d3;
-reg z80_bus_grant;
-wire z80_bus_disable = z80_bus_grant;
+wire z80_control_reset_n = ~z80_ctrl[0]; // TODO
+wire z80_bus_disable = z80_bus_requested && (!z80_control_reset_n || !z80_busak_n);
 
-assign z80_reset_n = ~z80_ctrl[0]; // TODO
-assign ics2115_reset_n = ~z80_ctrl[0]; // TODO
+assign z80_busrq_n = ~z80_bus_requested;
+assign z80_reset_n = z80_control_reset_n;
+assign ics2115_reset_n = z80_control_reset_n; // TODO
 
 always_comb begin
     v3021_dout = cpu_din[0];
@@ -76,11 +79,7 @@ always_comb begin
     aram_addr = z80_bus_disable ? cpu_addr[15:1] : z80_addr[15:1];
     aram_dout = z80_bus_disable ? cpu_din : { z80_din, z80_din };
 
-    // Assert WAIT as soon as the 68000 requests the Z80 RAM bus, but do not
-    // actually switch the shared RAM mux to the 68000 until the Z80 has reached
-    // an idle bus point.  Switching immediately can steal RAM in the middle of
-    // a Z80 opcode/stack cycle and eventually sends the Z80 into 0x76-filled RAM.
-    z80_wait_n = ~z80_bus_requested && (!z80_ics2115_access || ics2115_ready);
+    z80_wait_n = !z80_ics2115_access || ics2115_ready;
 
     z80_dout = z80_addr[0] ? aram_din[7:0] : aram_din[15:8];
 
@@ -131,14 +130,7 @@ end
 always_ff @(posedge clk) begin
     if (reset) begin
         z80_nmi_n <= 1;
-        z80_bus_grant <= 0;
     end else begin
-        if (!z80_bus_requested) begin
-            z80_bus_grant <= 0;
-        end else if (z80_mreq_n && z80_iorq_n) begin
-            z80_bus_grant <= 1;
-        end
-
         if (~io_access_n) begin
             if (~cpu_rw & ~cpu_lds_n) begin
                 case(cpu_addr[3:0])

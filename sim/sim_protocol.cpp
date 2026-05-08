@@ -27,6 +27,8 @@ class JsonValue
     Type mType = Type::NULL_VALUE;
     bool mBool = false;
     uint64_t mNumber = 0;
+    int64_t mSignedNumber = 0;
+    bool mNumberSigned = false;
     std::string mString;
     std::vector<JsonValue> mArray;
     std::map<std::string, JsonValue> mObject;
@@ -49,6 +51,16 @@ class JsonValue
         JsonValue json;
         json.mType = Type::NUMBER;
         json.mNumber = value;
+        json.mNumberSigned = false;
+        return json;
+    }
+
+    static JsonValue SignedNumber(int64_t value)
+    {
+        JsonValue json;
+        json.mType = Type::NUMBER;
+        json.mSignedNumber = value;
+        json.mNumberSigned = true;
         return json;
     }
 
@@ -423,7 +435,10 @@ std::string SerializeJson(const JsonValue &value)
         out << (value.mBool ? "true" : "false");
         break;
     case JsonValue::Type::NUMBER:
-        out << value.mNumber;
+        if (value.mNumberSigned)
+            out << value.mSignedNumber;
+        else
+            out << value.mNumber;
         break;
     case JsonValue::Type::STRING:
         out << '"' << EscapeJsonString(value.mString) << '"';
@@ -701,6 +716,90 @@ JsonValue CpuStateToJson(const CpuState &state)
         {"disasm", JsonValue::String(state.mDisasm)},
     });
 }
+
+JsonValue Ics2115VoiceToJson(const Ics2115VoiceState &voice)
+{
+    return JsonValue::Object({
+        {"index", JsonValue::Number(voice.mIndex)},
+        {"osc_acc", JsonValue::Number(voice.mOscAcc)},
+        {"osc_fc", JsonValue::Number(voice.mOscFc)},
+        {"osc_start", JsonValue::Number(voice.mOscStart)},
+        {"osc_end", JsonValue::Number(voice.mOscEnd)},
+        {"osc_saddr", JsonValue::Number(voice.mOscSaddr)},
+        {"osc_conf", JsonValue::Number(voice.mOscConf)},
+        {"osc_ctl", JsonValue::Number(voice.mOscCtl)},
+        {"vol_acc", JsonValue::Number(voice.mVolAcc)},
+        {"vol_start", JsonValue::Number(voice.mVolStart)},
+        {"vol_end", JsonValue::Number(voice.mVolEnd)},
+        {"vol_incr", JsonValue::Number(voice.mVolIncr)},
+        {"vol_pan", JsonValue::Number(voice.mVolPan)},
+        {"vol_ctrl", JsonValue::Number(voice.mVolCtrl)},
+        {"vol_mode", JsonValue::Number(voice.mVolMode)},
+        {"state_on", JsonValue::Bool(voice.mStateOn)},
+        {"state_ramp", JsonValue::Number(voice.mStateRamp)},
+    });
+}
+
+JsonValue Ics2115StateToJson(const Ics2115DebugState &state)
+{
+    std::vector<JsonValue> timers;
+    timers.reserve(state.mTimers.size());
+    for (size_t i = 0; i < state.mTimers.size(); i++)
+    {
+        const auto &timer = state.mTimers[i];
+        timers.push_back(JsonValue::Object({
+            {"index", JsonValue::Number(i)},
+            {"preset", JsonValue::Number(timer.mPreset)},
+            {"scale", JsonValue::Number(timer.mScale)},
+            {"count", JsonValue::Number(timer.mCount)},
+            {"period", JsonValue::Number(timer.mPeriod)},
+            {"running", JsonValue::Bool(timer.mRunning)},
+        }));
+    }
+
+    std::vector<JsonValue> voices;
+    voices.reserve(state.mVoices.size());
+    for (const auto &voice : state.mVoices)
+        voices.push_back(Ics2115VoiceToJson(voice));
+
+    return JsonValue::Object({
+        {"active_osc", JsonValue::Number(state.mActiveOsc)},
+        {"osc_select", JsonValue::Number(state.mOscSelect)},
+        {"reg_select", JsonValue::Number(state.mRegSelect)},
+        {"vmode", JsonValue::Number(state.mVmode)},
+        {"irq_pending", JsonValue::Number(state.mIrqPending)},
+        {"irq_enabled", JsonValue::Number(state.mIrqEnabled)},
+        {"irq_on", JsonValue::Bool(state.mIrqOn)},
+        {"osc_irq_pending_count", JsonValue::Number(state.mOscIrqPendingCount)},
+        {"vol_irq_pending_count", JsonValue::Number(state.mVolIrqPendingCount)},
+        {"state_on_count", JsonValue::Number(state.mStateOnCount)},
+        {"stop_count", JsonValue::Number(state.mStopCount)},
+        {"seq_state", JsonValue::Number(state.mSeqState)},
+        {"seq_voice_idx", JsonValue::Number(state.mSeqVoiceIdx)},
+        {"sample_tick", JsonValue::Bool(state.mSampleTick)},
+        {"host", JsonValue::Object({
+            {"dout", JsonValue::Number(state.mHostDout)},
+            {"cs_n", JsonValue::Bool(state.mHostCsN)},
+            {"rd_n", JsonValue::Bool(state.mHostRdN)},
+            {"wr_n", JsonValue::Bool(state.mHostWrN)},
+            {"irq", JsonValue::Bool(state.mHostIrq)},
+            {"ready", JsonValue::Bool(state.mHostReady)},
+            {"reset_n", JsonValue::Bool(state.mResetN)},
+        })},
+        {"rom", JsonValue::Object({
+            {"addr", JsonValue::Number(state.mRomAddr)},
+            {"data", JsonValue::Number(state.mRomData)},
+            {"data_valid", JsonValue::Bool(state.mRomDataValid)},
+        })},
+        {"audio", JsonValue::Object({
+            {"left", JsonValue::SignedNumber(state.mAudioLeft)},
+            {"right", JsonValue::SignedNumber(state.mAudioRight)},
+            {"valid", JsonValue::Bool(state.mAudioValid)},
+        })},
+        {"timers", JsonValue::Array(std::move(timers))},
+        {"voices", JsonValue::Array(std::move(voices))},
+    });
+}
 } // namespace
 
 SimProtocol::SimProtocol(SimController &controller) : mController(controller)
@@ -808,6 +907,11 @@ std::string SimProtocol::HandleLine(const std::string &line)
     {
         auto result = mController.GetCpuState();
         return SerializeJson(WrapControllerResult(id, result, CpuStateToJson(result.value)));
+    }
+    if (method == "ics2115.get_state")
+    {
+        auto result = mController.GetIcs2115DebugState();
+        return SerializeJson(WrapControllerResult(id, result, Ics2115StateToJson(result.value)));
     }
     if (method == "memory.read")
     {

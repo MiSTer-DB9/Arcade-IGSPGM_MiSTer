@@ -705,7 +705,7 @@ wire [15:0] igs026_x_aram_dout;
 
 wire igs026_x_aram_uds_n, igs026_x_aram_lds_n;
 
-wire z80_reset_n, z80_wait_n, z80_int_n, z80_nmi_n;
+wire z80_reset_n, z80_wait_n, z80_busrq_n, z80_busak_n, z80_int_n, z80_nmi_n;
 wire z80_mreq_n, z80_iorq_n, z80_rd_n, z80_wr_n;
 wire [15:0] z80_addr;
 wire [7:0] z80_din;
@@ -771,6 +771,8 @@ IGS026_X igs026_x(
 
     .z80_reset_n,
     .z80_wait_n,
+    .z80_busrq_n,
+    .z80_busak_n,
     .z80_int_n,
     .z80_nmi_n,
     .z80_mreq_n,
@@ -908,7 +910,7 @@ tv80s z80(
     .wait_n(z80_wait_n),
     .int_n(z80_int_n),
     .nmi_n(z80_nmi_n),
-    .busrq_n(1),
+    .busrq_n(z80_busrq_n),
     .m1_n(),
     .mreq_n(z80_mreq_n),
     .iorq_n(z80_iorq_n),
@@ -916,7 +918,7 @@ tv80s z80(
     .wr_n(z80_wr_n),
     .rfsh_n(),
     .halt_n(),
-    .busak_n(),
+    .busak_n(z80_busak_n),
     .A(z80_addr),
     .di(z80_din),
     .dout(z80_dout)
