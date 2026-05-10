@@ -755,7 +755,7 @@ ControllerResult<Ics2115DebugState> SimController::GetIcs2115DebugState() const
     result.mVmode = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__vmode;
     result.mIrqPending = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__irq_pending;
     result.mIrqEnabled = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__irq_enabled;
-    result.mIrqOn = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__irq_on != 0;
+    result.mIrqOn = root->sim_top__DOT__pgm_inst__DOT__ics2115_irq != 0;
     result.mOscIrqPendingCount = 0;
     result.mVolIrqPendingCount = 0;
     result.mStateOnCount = 0;
@@ -768,7 +768,7 @@ ControllerResult<Ics2115DebugState> SimController::GetIcs2115DebugState() const
     result.mHostRdN = root->sim_top__DOT__pgm_inst__DOT__ics2115_rd_n != 0;
     result.mHostWrN = root->sim_top__DOT__pgm_inst__DOT__ics2115_wr_n != 0;
     result.mHostIrq = result.mIrqOn;
-    result.mHostReady = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__host_voice_wr_pending == 0;
+    result.mHostReady = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__host_fifo_count < 16;
     result.mResetN = root->sim_top__DOT__pgm_inst__DOT__z80_reset_n != 0;
     result.mRomDataValid = root->sim_top__DOT__pgm_inst__DOT__ics2115_data_valid != 0;
     result.mRomAddr = root->sim_top__DOT__pgm_inst__DOT__ics2115_rom_addr;
@@ -792,7 +792,7 @@ ControllerResult<Ics2115DebugState> SimController::GetIcs2115DebugState() const
     result.mVoices.reserve(32);
     for (int i = 0; i < 32; i++)
     {
-        const auto &wide = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__voice_regs[i];
+        const auto &wide = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__voice_ram__DOT__ram[i];
         Ics2115VoiceState voice;
         voice.mIndex = i;
         voice.mStateRamp = GetWideBits(wide, 0, 7);

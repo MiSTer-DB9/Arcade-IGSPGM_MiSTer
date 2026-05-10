@@ -34,9 +34,50 @@ module ics2115
 );
 
     // =========================================================================
-    // Voice state array
+    // Voice state RAM
     // =========================================================================
-    voice_state_t voice_regs [0:NUM_VOICES-1];
+    localparam VOICE_BITS = $bits(voice_state_t);
+
+    logic [4:0] voice_ram_addr_a;
+    logic       voice_ram_wren_a;
+    logic [VOICE_BITS-1:0] voice_ram_data_a;
+    logic [VOICE_BITS-1:0] voice_ram_q_a;
+
+    logic [4:0] voice_ram_addr_b;
+    logic       voice_ram_wren_b;
+    logic [VOICE_BITS-1:0] voice_ram_data_b;
+    logic [VOICE_BITS-1:0] voice_ram_q_b;
+
+    dualport_ram_unreg #(.WIDTH(VOICE_BITS), .WIDTHAD(5)) voice_ram (
+        .clock_a(clk),
+        .wren_a(voice_ram_wren_a),
+        .address_a(voice_ram_addr_a),
+        .data_a(voice_ram_data_a),
+        .q_a(voice_ram_q_a),
+        .clock_b(clk),
+        .wren_b(voice_ram_wren_b),
+        .address_b(voice_ram_addr_b),
+        .data_b(voice_ram_data_b),
+        .q_b(voice_ram_q_b)
+    );
+
+    voice_state_t seq_voice_data;
+    voice_state_t host_voice_data;
+    assign host_voice_data = voice_state_t'(voice_ram_q_b);
+
+    function automatic voice_state_t default_voice_state();
+        voice_state_t result;
+        result = '0;
+        result.osc_conf = 8'h02;  // stop=1
+        result.vol_pan = 8'h7F;   // center
+        result.vol_ctrl = 8'h01;  // done=1
+        return result;
+    endfunction
+
+    logic [31:0] osc_irq_en;
+    logic [31:0] osc_irq_pending;
+    logic [31:0] vol_irq_en;
+    logic [31:0] vol_irq_pending;
 
     // =========================================================================
     // Global registers
@@ -125,7 +166,7 @@ module ics2115
 
     // Rate divider logic based on vol_incr[7:6] and ramp_cnt
     always_comb begin
-        case (voice_regs[seq_voice_idx].vol_incr[7:6])
+        case (seq_voice_data.vol_incr[7:6])
             2'd0: vol_rate_enable = 1'b1;                                       // every tick
             2'd1: vol_rate_enable = (ramp_cnt[2:0] == seq_voice_idx[2:0]);      // every 8th
             2'd2: vol_rate_enable = (ramp_cnt[5:0] == {3'd0, seq_voice_idx[2:0]});  // every 64th
@@ -144,16 +185,20 @@ module ics2115
     // =========================================================================
     // Voice processing sequencer
     // =========================================================================
-    typedef enum logic [2:0] {
-        SEQ_IDLE    = 3'd0,
-        SEQ_LOAD    = 3'd1,
-        SEQ_WAIT    = 3'd2,
-        SEQ_STORE   = 3'd3,
-        SEQ_OUTPUT  = 3'd4
+    typedef enum logic [3:0] {
+        SEQ_IDLE         = 4'd0,
+        SEQ_LOAD_ADDR    = 4'd1,
+        SEQ_LOAD_WAIT    = 4'd2,
+        SEQ_LOAD_CAPTURE = 4'd3,
+        SEQ_START        = 4'd4,
+        SEQ_WAIT         = 4'd5,
+        SEQ_STORE        = 4'd6,
+        SEQ_OUTPUT       = 4'd7
     } seq_state_t;
 
     seq_state_t seq_state;
     logic [4:0] seq_voice_idx;
+    logic [4:0] seq_voice_rd_addr;
 
     // Audio accumulators (24-bit signed to sum across all voices)
     logic signed [23:0] acc_left;
@@ -192,6 +237,10 @@ module ics2115
     logic signed [23:0] osc_audio_left;
     logic signed [23:0] osc_audio_right;
     logic        osc_audio_valid;
+
+    assign voice_ram_wren_a = (seq_state == SEQ_STORE);
+    assign voice_ram_addr_a = (seq_state == SEQ_STORE) ? seq_voice_idx : seq_voice_rd_addr;
+    assign voice_ram_data_a = voice_state_t'(osc_voice_out);
 
     ics2115_osc u_osc (
         .clk           (clk),
@@ -234,6 +283,8 @@ module ics2115
         if (!reset_n) begin
             seq_state     <= SEQ_IDLE;
             seq_voice_idx <= 5'd0;
+            seq_voice_rd_addr <= 5'd0;
+            seq_voice_data <= default_voice_state();
             osc_start     <= 1'b0;
             osc_voice_in  <= '0;
             acc_left      <= 24'sd0;
@@ -258,16 +309,31 @@ module ics2115
                 SEQ_IDLE: begin
                     if (sample_tick) begin
                         seq_voice_idx <= 5'd0;
+                        seq_voice_rd_addr <= 5'd0;
                         acc_left      <= 24'sd0;
                         acc_right     <= 24'sd0;
-                        seq_state     <= SEQ_LOAD;
+                        seq_state     <= SEQ_LOAD_ADDR;
                     end
                 end
 
-                SEQ_LOAD: begin
-                    osc_voice_in <= voice_regs[seq_voice_idx];
-                    osc_start    <= 1'b1;
-                    seq_state    <= SEQ_WAIT;
+                SEQ_LOAD_ADDR: begin
+                    seq_voice_rd_addr <= seq_voice_idx;
+                    seq_state <= SEQ_LOAD_WAIT;
+                end
+
+                SEQ_LOAD_WAIT: begin
+                    seq_state <= SEQ_LOAD_CAPTURE;
+                end
+
+                SEQ_LOAD_CAPTURE: begin
+                    seq_voice_data <= voice_state_t'(voice_ram_q_a);
+                    osc_voice_in <= voice_state_t'(voice_ram_q_a);
+                    seq_state <= SEQ_START;
+                end
+
+                SEQ_START: begin
+                    osc_start <= 1'b1;
+                    seq_state <= SEQ_WAIT;
                 end
 
                 SEQ_WAIT: begin
@@ -292,7 +358,8 @@ module ics2115
                         seq_state <= SEQ_OUTPUT;
                     end else begin
                         seq_voice_idx <= seq_voice_idx + 5'd1;
-                        seq_state     <= SEQ_LOAD;
+                        seq_voice_rd_addr <= seq_voice_idx + 5'd1;
+                        seq_state     <= SEQ_LOAD_ADDR;
                     end
                 end
 
@@ -327,18 +394,24 @@ module ics2115
     logic host_rd_pulse;
     logic host_rd_done_pulse;
     logic host_rd_prev;
+    logic host_wr_pulse;
+    logic host_wr_prev;
 
     assign host_rd_pulse = ~host_cs_n & ~host_rd_n & host_rd_prev;
+    assign host_wr_pulse = ~host_cs_n & ~host_wr_n & host_wr_prev;
     // Apply read side effects after RD/CS deasserts so host_dout remains stable
     // for the full Z80 read cycle.  Clearing IRQV on the leading edge makes
     // the Z80 sample 0xFF/no-pending instead of the interrupting voice number.
     assign host_rd_done_pulse = (host_cs_n | host_rd_n) & ~host_rd_prev;
 
     always_ff @(posedge clk or negedge reset_n) begin
-        if (!reset_n)
+        if (!reset_n) begin
             host_rd_prev <= 1'b1;
-        else
+            host_wr_prev <= 1'b1;
+        end else begin
             host_rd_prev <= host_cs_n | host_rd_n;
+            host_wr_prev <= host_cs_n | host_wr_n;
+        end
     end
 
     // =========================================================================
@@ -346,12 +419,8 @@ module ics2115
     // Matches MAME recalc_irq(): scans all 32 voices for pending IRQs
     // =========================================================================
     always_comb begin
-        irq_on = |(irq_pending & irq_enabled);
-        for (int i = 0; i < NUM_VOICES; i++) begin
-            irq_on = irq_on |
-                (voice_regs[i].osc_conf[OSC_IRQ] & voice_regs[i].osc_conf[OSC_IRQ_PEND]) |
-                (voice_regs[i].vol_ctrl[VOL_IRQ] & voice_regs[i].vol_ctrl[VOL_IRQ_PEND]);
-        end
+        irq_on = |(irq_pending & irq_enabled)
+              | |((osc_irq_en & osc_irq_pending) | (vol_irq_en & vol_irq_pending));
     end
 
     assign host_irq = irq_on;
@@ -361,6 +430,8 @@ module ics2115
     // =========================================================================
     logic [15:0] reg_read_data;
     logic        irqv_found;  // used in IRQV scan to find first match
+    voice_state_t reg_read_voice;
+    assign reg_read_voice = host_voice_data;
 
     always_comb begin
         reg_read_data = 16'd0;
@@ -371,54 +442,54 @@ module ics2115
                 // 0x00: Oscillator Configuration — osc_conf with state_on merged into bit 3
                 5'h00: begin
                     reg_read_data = {
-                        (voice_regs[osc_select].osc_conf & ~8'h08) |
-                        (voice_regs[osc_select].state_on ? 8'h08 : 8'h00),
+                        (reg_read_voice.osc_conf & ~8'h08) |
+                        (reg_read_voice.state_on ? 8'h08 : 8'h00),
                         8'h00
                     };
                 end
 
                 // 0x01: Wavesample frequency (16-bit, no shift)
-                5'h01: reg_read_data = voice_regs[osc_select].osc_fc;
+                5'h01: reg_read_data = reg_read_voice.osc_fc;
 
                 // 0x02: Wavesample loop start high (bits 28:13 of 29-bit addr)
-                5'h02: reg_read_data = voice_regs[osc_select].osc_start[28:13];
+                5'h02: reg_read_data = reg_read_voice.osc_start[28:13];
 
                 // 0x03: Wavesample loop start low (bits 12:5 in high byte)
-                5'h03: reg_read_data = {voice_regs[osc_select].osc_start[12:5], 8'h00};
+                5'h03: reg_read_data = {reg_read_voice.osc_start[12:5], 8'h00};
 
                 // 0x04: Wavesample loop end high
-                5'h04: reg_read_data = voice_regs[osc_select].osc_end[28:13];
+                5'h04: reg_read_data = reg_read_voice.osc_end[28:13];
 
                 // 0x05: Wavesample loop end low
-                5'h05: reg_read_data = {voice_regs[osc_select].osc_end[12:5], 8'h00};
+                5'h05: reg_read_data = {reg_read_voice.osc_end[12:5], 8'h00};
 
                 // 0x06: Volume Increment (8-bit)
-                5'h06: reg_read_data = {8'h00, voice_regs[osc_select].vol_incr};
+                5'h06: reg_read_data = {8'h00, reg_read_voice.vol_incr};
 
                 // 0x07: Volume Start — top 8 bits of 26-bit value (bits 25:18)
-                5'h07: reg_read_data = {8'h00, voice_regs[osc_select].vol_start[25:18]};
+                5'h07: reg_read_data = {8'h00, reg_read_voice.vol_start[25:18]};
 
                 // 0x08: Volume End — top 8 bits
-                5'h08: reg_read_data = {8'h00, voice_regs[osc_select].vol_end[25:18]};
+                5'h08: reg_read_data = {8'h00, reg_read_voice.vol_end[25:18]};
 
                 // 0x09: Volume accumulator (bits 25:10 of 26-bit value)
-                5'h09: reg_read_data = voice_regs[osc_select].vol_acc[25:10];
+                5'h09: reg_read_data = reg_read_voice.vol_acc[25:10];
 
                 // 0x0A: Wavesample address high (osc_acc bits 28:13)
-                5'h0A: reg_read_data = voice_regs[osc_select].osc_acc[28:13];
+                5'h0A: reg_read_data = reg_read_voice.osc_acc[28:13];
 
                 // 0x0B: Wavesample address low — MAME returns (acc >> 0) & 0xFFF8
                 // Our 29-bit acc maps: MAME bits [15:3] → our bits [12:0]
                 // Mask 0xFFF8 clears bottom 3 bits. Return {osc_acc[12:0], 3'b000}.
-                5'h0B: reg_read_data = {voice_regs[osc_select].osc_acc[12:0], 3'b000};
+                5'h0B: reg_read_data = {reg_read_voice.osc_acc[12:0], 3'b000};
 
                 // 0x0C: Pan — pan value in high byte
-                5'h0C: reg_read_data = {voice_regs[osc_select].vol_pan, 8'h00};
+                5'h0C: reg_read_data = {reg_read_voice.vol_pan, 8'h00};
 
                 // 0x0D: Volume Envelope Control — stub for T02 IRQ work
                 5'h0D: begin
                     if (vmode == 8'd0)
-                        reg_read_data = {(voice_regs[osc_select].vol_ctrl[VOL_IRQ] ? 8'h81 : 8'h01), 8'h00};
+                        reg_read_data = {(reg_read_voice.vol_ctrl[VOL_IRQ] ? 8'h81 : 8'h01), 8'h00};
                     else
                         reg_read_data = {8'h01, 8'h00};
                 end
@@ -433,12 +504,12 @@ module ics2115
                     irqv_found = 1'b0;
                     for (int i = 0; i < NUM_VOICES; i++) begin
                         if (i[4:0] <= active_osc && !irqv_found) begin
-                            if (voice_regs[i].osc_conf[OSC_IRQ_PEND] || voice_regs[i].vol_ctrl[VOL_IRQ_PEND]) begin
+                            if (osc_irq_pending[i] || vol_irq_pending[i]) begin
                                 irqv_found = 1'b1;
                                 reg_read_data[15:8] = {3'b111, i[4:0]};
-                                if (voice_regs[i].osc_conf[OSC_IRQ_PEND])
+                                if (osc_irq_pending[i])
                                     reg_read_data[15] = 1'b0;  // clear bit 7 = osc source
-                                if (voice_regs[i].vol_ctrl[VOL_IRQ_PEND])
+                                if (vol_irq_pending[i])
                                     reg_read_data[14] = 1'b0;  // clear bit 6 = vol source
                             end
                         end
@@ -446,10 +517,10 @@ module ics2115
                 end
 
                 // 0x10: Oscillator Control — osc_ctl in high byte
-                5'h10: reg_read_data = {voice_regs[osc_select].osc_ctl, 8'h00};
+                5'h10: reg_read_data = {reg_read_voice.osc_ctl, 8'h00};
 
                 // 0x11: Wavesample static address — saddr in high byte
-                5'h11: reg_read_data = {voice_regs[osc_select].osc_saddr, 8'h00};
+                5'h11: reg_read_data = {reg_read_voice.osc_saddr, 8'h00};
 
                 default: reg_read_data = 16'd0;
             endcase
@@ -487,11 +558,7 @@ module ics2115
     // Port 0 status register: compute "any voice has osc IRQ pending"
     logic any_voice_osc_irq;
     always_comb begin
-        any_voice_osc_irq = 1'b0;
-        for (int i = 0; i < NUM_VOICES; i++) begin
-            if (i[4:0] <= active_osc)
-                any_voice_osc_irq = any_voice_osc_irq | voice_regs[i].osc_conf[OSC_IRQ_PEND];
-        end
+        any_voice_osc_irq = |osc_irq_pending;
     end
 
     // IRQV auto-clear computation: combinational scan for which voice to clear
@@ -508,11 +575,11 @@ module ics2115
         if (host_rd_done_pulse && host_addr == 2'd3 && reg_select == 8'h0F) begin
             for (int i = 0; i < NUM_VOICES; i++) begin
                 if (i[4:0] <= active_osc && !irqv_clear_found) begin
-                    if (voice_regs[i].osc_conf[OSC_IRQ_PEND] || voice_regs[i].vol_ctrl[VOL_IRQ_PEND]) begin
+                    if (osc_irq_pending[i] || vol_irq_pending[i]) begin
                         irqv_clear_found      = 1'b1;
                         irqv_clear_voice_next = i[4:0];
-                        irqv_clear_osc_next   = voice_regs[i].osc_conf[OSC_IRQ_PEND];
-                        irqv_clear_vol_next   = voice_regs[i].vol_ctrl[VOL_IRQ_PEND];
+                        irqv_clear_osc_next   = osc_irq_pending[i];
+                        irqv_clear_vol_next   = vol_irq_pending[i];
                     end
                 end
             end
@@ -538,7 +605,7 @@ module ics2115
             2'd0: begin
                 // Port 0: IRQ status — MAME read() case 0
                 host_dout = 8'd0;
-                host_dout[6] = |host_voice_wr_pending;  // bit 6: buffered voice write pending
+                host_dout[6] = (host_fifo_count != '0) | (|host_voice_wr_pending) | (host_state != HOST_IDLE);  // bit 6: buffered voice write pending
                 if (irq_on) begin
                     host_dout[7] = 1'b1;  // bit 7: any IRQ active
                     if (irq_enabled != 8'd0 && (irq_pending & 8'h03) != 8'h00)
@@ -554,7 +621,6 @@ module ics2115
         endcase
     end
 
-    assign host_ready = !(|host_voice_wr_pending);
     // host_irq driven by recalc_irq logic above
 
     function automatic voice_state_t apply_voice_reg_byte(
@@ -613,28 +679,77 @@ module ics2115
         return result;
     endfunction
 
-    wire host_voice_wr_busy = (seq_state == SEQ_LOAD || seq_state == SEQ_WAIT || seq_state == SEQ_STORE)
-                           && (host_voice_wr_voice == seq_voice_idx);
-    assign host_voice_wr_apply = |host_voice_wr_pending
-                              && !host_voice_wr_busy
-                              && !(seq_voice_wr && seq_wr_idx == host_voice_wr_voice);
+    typedef enum logic [2:0] {
+        HOST_INIT = 3'd0,
+        HOST_IDLE = 3'd1,
+        HOST_WR_WAIT0 = 3'd2,
+        HOST_WR_WAIT1 = 3'd3,
+        HOST_WR_COMMIT = 3'd4,
+        HOST_CLR_WAIT0 = 3'd5,
+        HOST_CLR_WAIT1 = 3'd6,
+        HOST_CLR_COMMIT = 3'd7
+    } host_state_t;
+
+    host_state_t host_state;
+    logic [4:0] host_init_idx;
+    logic irqv_ram_clear_pending;
+    logic [4:0] irqv_ram_clear_voice;
+    logic irqv_ram_clear_osc;
+    logic irqv_ram_clear_vol;
+    voice_state_t irqv_ram_clear_data;
+
+    localparam HOST_FIFO_BITS = 4;
+    localparam HOST_FIFO_DEPTH = 1 << HOST_FIFO_BITS;
+    logic [4:0] host_fifo_voice [0:HOST_FIFO_DEPTH-1];
+    logic [7:0] host_fifo_reg [0:HOST_FIFO_DEPTH-1];
+    logic [7:0] host_fifo_data [0:HOST_FIFO_DEPTH-1];
+    logic       host_fifo_high [0:HOST_FIFO_DEPTH-1];
+    logic [HOST_FIFO_BITS-1:0] host_fifo_head;
+    logic [HOST_FIFO_BITS-1:0] host_fifo_tail;
+    logic [HOST_FIFO_BITS:0] host_fifo_count;
+
+    wire host_fifo_full = host_fifo_count == HOST_FIFO_DEPTH[HOST_FIFO_BITS:0];
+    wire host_fifo_empty = host_fifo_count == '0;
+
+    wire [4:0] host_next_voice = irqv_ram_clear_pending ? irqv_ram_clear_voice :
+                                  (host_fifo_empty ? host_voice_wr_voice : host_fifo_voice[host_fifo_head]);
+    wire host_voice_wr_busy = (seq_state != SEQ_IDLE && seq_state != SEQ_OUTPUT)
+                           && (host_next_voice == seq_voice_idx);
+    wire host_fifo_pop_now = (host_state == HOST_IDLE) && !irqv_ram_clear_pending && !host_fifo_empty && !host_voice_wr_busy;
 
     always_comb begin
-        host_voice_wr_data = voice_regs[host_voice_wr_voice];
+        host_voice_wr_data = host_voice_data;
         if (host_voice_wr_pending[1])
             host_voice_wr_data = apply_voice_reg_byte(host_voice_wr_data, host_voice_wr_reg, host_voice_wr_value[15:8], 1'b1);
         if (host_voice_wr_pending[0])
             host_voice_wr_data = apply_voice_reg_byte(host_voice_wr_data, host_voice_wr_reg, host_voice_wr_value[7:0], 1'b0);
     end
 
-    wire host_voice_wr_same_target = (host_voice_wr_voice == osc_select) && (host_voice_wr_reg == reg_select);
-    wire host_voice_wr_can_buffer = !(|host_voice_wr_pending) || host_voice_wr_same_target || host_voice_wr_apply;
+    wire host_voice_wr_can_buffer = !host_fifo_full || host_fifo_pop_now;
+
+    assign host_ready = !host_fifo_full;
+    assign host_voice_wr_apply = (host_state == HOST_WR_COMMIT);
+
+    always_comb begin
+        irqv_ram_clear_data = host_voice_data;
+        if (irqv_ram_clear_osc)
+            irqv_ram_clear_data.osc_conf[OSC_IRQ_PEND] = 1'b0;
+        if (irqv_ram_clear_vol)
+            irqv_ram_clear_data.vol_ctrl[VOL_IRQ_PEND] = 1'b0;
+    end
+
+    assign voice_ram_addr_b = (host_state == HOST_INIT) ? host_init_idx :
+                              (host_state == HOST_WR_WAIT0 || host_state == HOST_WR_WAIT1 || host_state == HOST_WR_COMMIT) ? host_voice_wr_voice :
+                              (host_state == HOST_CLR_WAIT0 || host_state == HOST_CLR_WAIT1 || host_state == HOST_CLR_COMMIT) ? irqv_ram_clear_voice :
+                              osc_select;
+    assign voice_ram_wren_b = (host_state == HOST_INIT) || (host_state == HOST_WR_COMMIT) || (host_state == HOST_CLR_COMMIT);
+    assign voice_ram_data_b = (host_state == HOST_INIT) ? voice_state_t'(default_voice_state()) :
+                              (host_state == HOST_CLR_COMMIT) ? voice_state_t'(irqv_ram_clear_data) :
+                              voice_state_t'(host_voice_wr_data);
 
     // =========================================================================
-    // Unified voice_regs + global register write block
+    // Global register, host command, and voice RAM sideband block
     // =========================================================================
-    // Single always_ff drives voice_regs to avoid MULTIDRIVEN.
-    // Priority: sequencer write-back > host writes (sequencer is pipeline-hot).
 
     always_ff @(posedge clk or negedge reset_n) begin
         if (!reset_n) begin
@@ -653,6 +768,19 @@ module ics2115
             host_voice_wr_reg <= 8'd0;
             host_voice_wr_value <= 16'd0;
             host_voice_wr_pending <= 2'b00;
+            host_state <= HOST_INIT;
+            host_init_idx <= 5'd0;
+            host_fifo_head <= '0;
+            host_fifo_tail <= '0;
+            host_fifo_count <= '0;
+            irqv_ram_clear_pending <= 1'b0;
+            irqv_ram_clear_voice <= 5'd0;
+            irqv_ram_clear_osc <= 1'b0;
+            irqv_ram_clear_vol <= 1'b0;
+            osc_irq_en <= 32'd0;
+            osc_irq_pending <= 32'd0;
+            vol_irq_en <= 32'd0;
+            vol_irq_pending <= 32'd0;
             for (int i = 0; i < 2; i++) begin
                 timer_preset[i]   <= 8'd0;
                 timer_scale[i]    <= 8'd0;
@@ -660,39 +788,66 @@ module ics2115
                 timer_period[i]   <= 24'd0;
                 timer_running[i]  <= 1'b0;
             end
-            for (int i = 0; i < NUM_VOICES; i++) begin
-                voice_regs[i].osc_acc   <= 29'd0;
-                voice_regs[i].osc_fc    <= 16'd0;
-                voice_regs[i].osc_start <= 29'd0;
-                voice_regs[i].osc_end   <= 29'd0;
-                voice_regs[i].osc_saddr <= 8'd0;
-                voice_regs[i].osc_conf  <= 8'h02;  // stop=1
-                voice_regs[i].osc_ctl   <= 8'd0;
-                voice_regs[i].vol_acc   <= 26'd0;
-                voice_regs[i].vol_start <= 26'd0;
-                voice_regs[i].vol_end   <= 26'd0;
-                voice_regs[i].vol_incr  <= 8'd0;
-                voice_regs[i].vol_pan   <= 8'h7F;  // center
-                voice_regs[i].vol_ctrl  <= 8'h01;  // done=1
-                voice_regs[i].vol_mode  <= 8'd0;
-                voice_regs[i].state_on  <= 1'b0;
-                voice_regs[i].state_ramp <= 7'd0;
-            end
         end else begin
 
-            // ── Sequencer voice write-back (highest priority) ──
-            if (seq_voice_wr) begin
-                voice_regs[seq_wr_idx] <= seq_wr_data;
+            if (host_state == HOST_INIT) begin
+                if (host_init_idx == 5'd31) begin
+                    host_state <= HOST_IDLE;
+                end else begin
+                    host_init_idx <= host_init_idx + 5'd1;
+                end
+            end else begin
+                case (host_state)
+                    HOST_IDLE: begin
+                        if (irqv_ram_clear_pending && !host_voice_wr_busy) begin
+                            host_state <= HOST_CLR_WAIT0;
+                        end else if (host_fifo_pop_now) begin
+                            host_voice_wr_voice <= host_fifo_voice[host_fifo_head];
+                            host_voice_wr_reg <= host_fifo_reg[host_fifo_head];
+                            if (host_fifo_high[host_fifo_head]) begin
+                                host_voice_wr_value[15:8] <= host_fifo_data[host_fifo_head];
+                                host_voice_wr_pending <= 2'b10;
+                            end else begin
+                                host_voice_wr_value[7:0] <= host_fifo_data[host_fifo_head];
+                                host_voice_wr_pending <= 2'b01;
+                            end
+                            host_fifo_head <= host_fifo_head + 1'b1;
+                            host_fifo_count <= host_fifo_count - 1'b1;
+                            host_state <= HOST_WR_WAIT0;
+                        end
+                    end
+                    HOST_WR_WAIT0: host_state <= HOST_WR_WAIT1;
+                    HOST_WR_WAIT1: host_state <= HOST_WR_COMMIT;
+                    HOST_WR_COMMIT: begin
+                        host_voice_wr_pending <= 2'b00;
+                        host_state <= HOST_IDLE;
+                    end
+                    HOST_CLR_WAIT0: host_state <= HOST_CLR_WAIT1;
+                    HOST_CLR_WAIT1: host_state <= HOST_CLR_COMMIT;
+                    HOST_CLR_COMMIT: begin
+                        irqv_ram_clear_pending <= 1'b0;
+                        host_state <= HOST_IDLE;
+                    end
+                    default: host_state <= HOST_IDLE;
+                endcase
             end
 
-            // ── Buffered host voice-register write commit ──
+            if (seq_voice_wr) begin
+                osc_irq_en[seq_wr_idx] <= seq_wr_data.osc_conf[OSC_IRQ];
+                osc_irq_pending[seq_wr_idx] <= seq_wr_data.osc_conf[OSC_IRQ_PEND];
+                vol_irq_en[seq_wr_idx] <= seq_wr_data.vol_ctrl[VOL_IRQ];
+                vol_irq_pending[seq_wr_idx] <= seq_wr_data.vol_ctrl[VOL_IRQ_PEND];
+            end
+
             if (host_voice_wr_apply) begin
-                voice_regs[host_voice_wr_voice] <= host_voice_wr_data;
-                host_voice_wr_pending <= 2'b00;
+                osc_irq_en[host_voice_wr_voice] <= host_voice_wr_data.osc_conf[OSC_IRQ];
+                osc_irq_pending[host_voice_wr_voice] <= host_voice_wr_data.osc_conf[OSC_IRQ_PEND];
+                vol_irq_en[host_voice_wr_voice] <= host_voice_wr_data.vol_ctrl[VOL_IRQ];
+                vol_irq_pending[host_voice_wr_voice] <= host_voice_wr_data.vol_ctrl[VOL_IRQ_PEND];
             end
 
             // ── Host bus port writes ──
-            if (~host_wr_n & ~host_cs_n) begin
+            if (host_wr_pulse) begin
                 case (host_addr)
                     2'd1: begin
                         reg_select <= host_din[7:0];
@@ -705,10 +860,12 @@ module ics2115
                                 5'h12: vmode      <= host_din[7:0];
                                 default: begin
                                     if (host_voice_wr_can_buffer) begin
-                                        host_voice_wr_voice <= osc_select;
-                                        host_voice_wr_reg <= reg_select;
-                                        host_voice_wr_value[15:8] <= host_din[7:0];
-                                        host_voice_wr_pending[1] <= 1'b1;
+                                        host_fifo_voice[host_fifo_tail] <= osc_select;
+                                        host_fifo_reg[host_fifo_tail] <= reg_select;
+                                        host_fifo_data[host_fifo_tail] <= host_din[7:0];
+                                        host_fifo_high[host_fifo_tail] <= 1'b1;
+                                        host_fifo_tail <= host_fifo_tail + 1'b1;
+                                        host_fifo_count <= host_fifo_pop_now ? host_fifo_count : (host_fifo_count + 1'b1);
                                     end
                                 end
                             endcase
@@ -726,10 +883,12 @@ module ics2115
                                 5'h0E, 5'h12: ;
                                 default: begin
                                     if (host_voice_wr_can_buffer) begin
-                                        host_voice_wr_voice <= osc_select;
-                                        host_voice_wr_reg <= reg_select;
-                                        host_voice_wr_value[7:0] <= host_din[7:0];
-                                        host_voice_wr_pending[0] <= 1'b1;
+                                        host_fifo_voice[host_fifo_tail] <= osc_select;
+                                        host_fifo_reg[host_fifo_tail] <= reg_select;
+                                        host_fifo_data[host_fifo_tail] <= host_din[7:0];
+                                        host_fifo_high[host_fifo_tail] <= 1'b0;
+                                        host_fifo_tail <= host_fifo_tail + 1'b1;
+                                        host_fifo_count <= host_fifo_pop_now ? host_fifo_count : (host_fifo_count + 1'b1);
                                     end
                                 end
                             endcase
@@ -775,15 +934,19 @@ module ics2115
             irqv_clear_vol   <= irqv_clear_vol_next;
             irqv_clear_voice <= irqv_clear_voice_next;
 
-            // Apply the clear from the PREVIOUS cycle's registered values
+            // Apply the clear from the PREVIOUS cycle's registered values.
+            // IRQ status is tracked in sideband bitmaps so IRQV does not need
+            // a combinational scan of the RAM-backed voice state.
             if (irqv_clear_osc || irqv_clear_vol) begin
-                if (!(seq_voice_wr && seq_wr_idx == irqv_clear_voice)) begin
-                    if (irqv_clear_osc)
-                        voice_regs[irqv_clear_voice].osc_conf[OSC_IRQ_PEND] <= 1'b0;
-                    if (irqv_clear_vol)
-                        voice_regs[irqv_clear_voice].vol_ctrl[VOL_IRQ_PEND] <= 1'b0;
-                end
+                irqv_ram_clear_pending <= 1'b1;
+                irqv_ram_clear_voice <= irqv_clear_voice;
+                irqv_ram_clear_osc <= irqv_clear_osc;
+                irqv_ram_clear_vol <= irqv_clear_vol;
             end
+            if (irqv_clear_osc)
+                osc_irq_pending[irqv_clear_voice] <= 1'b0;
+            if (irqv_clear_vol)
+                vol_irq_pending[irqv_clear_voice] <= 1'b0;
 
             // ── Timer IRQ auto-clear side-effect ──
             // Register the clear request, apply one cycle later (same pattern as IRQV)

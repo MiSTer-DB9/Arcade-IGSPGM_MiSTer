@@ -436,7 +436,7 @@ void Ics2115DebugUiTick()
         gHistory.mVoiceWave[voiceIndex].Push(NormalizeAudio24(root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__debug_voice_sample_left[voiceIndex],
                                                               root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__debug_voice_sample_right[voiceIndex]));
 
-        const auto &wide = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__voice_regs[voiceIndex];
+        const auto &wide = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__voice_ram__DOT__ram[voiceIndex];
         const uint32_t volAcc = static_cast<uint32_t>(GetWideBits(wide, 92, 26));
         gHistory.mVoiceVolume[voiceIndex].Push(static_cast<float>(volAcc) / static_cast<float>((1u << 26) - 1u));
     }

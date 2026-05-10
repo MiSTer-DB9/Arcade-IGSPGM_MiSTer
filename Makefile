@@ -36,7 +36,6 @@ deploy.done: $(RBF)
 
 deploy: deploy.done
 
-
 mister/%: releases/% deploy.done
 	scp "$<" $(MISTER):/media/fat/_Development/
 	ssh $(MISTER) "echo 'load_core _Development/$(notdir $<)' > /dev/MiSTer_cmd"
@@ -44,6 +43,11 @@ mister/%: releases/% deploy.done
 mister: mister/PGM.mra
 mister/espgalbl: mister/espgalbl.mra
 
+mister/test:
+	$(MAKE) -j8 -C testroms TARGET=pgm_test mister
+	scp ./testroms/build/pgm_test/pgm_test.zip $(MISTER):/media/fat/games/mame/
+	scp releases/pgm_test.mra $(MISTER):/media/fat/_Development/
+	ssh $(MISTER) "echo 'load_core _Development/pgm_test.mra' > /dev/MiSTer_cmd"
 
 rbf: $(OUTDIR)/$(CONFIG).rbf
 
@@ -92,4 +96,4 @@ releases:
 releases.patch:
 	diff -ruN -x "*.rbf" -x ".DS_Store" releases_clean releases > releases.patch || true
 
-.PHONY: sim sim/run sim/test mister debug picorom rtl/jt10_auto_ss.sv rtl/tv80_auto_ss.sv releases releases_clean releases.patch
+.PHONY: sim sim/run sim/test mister/test mister debug picorom rtl/jt10_auto_ss.sv rtl/tv80_auto_ss.sv releases releases_clean releases.patch
