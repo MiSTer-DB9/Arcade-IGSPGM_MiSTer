@@ -61,6 +61,9 @@ module IGS023 #(parameter SS_IDX=-1) (
     output reg vid_vsync,
     output reg vid_vblank,
 
+    input      pause_req,
+    output reg pause_ack,
+
     ssbus_if.slave ssbus
 );
 
@@ -309,6 +312,7 @@ always @(posedge clk) begin
         debug_sprite_dma_disable <= 0;
         irq6 <= 0;
         irq4 <= 0;
+        pause_ack <= pause_req;
     end begin
         dma_start <= 0;
         vram_cpu_bus_free_d <= reset ? 1'b0 : vram_cpu_bus_free;
@@ -338,8 +342,10 @@ always @(posedge clk) begin
 
             ctrl[7] <= ctrl[7] + 1;
 
-            if (ctrl[7] == 221 && dma_en && !debug_sprite_dma_disable) begin
-                dma_start <= 1;
+            if (ctrl[7] == 221) begin
+                pause_ack <= pause_req;
+                if (dma_en && !debug_sprite_dma_disable && !pause_req)
+                    dma_start <= 1;
             end
 
             if (irq4_cnt == 61) begin

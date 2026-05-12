@@ -86,6 +86,7 @@ ddr_mux ddr_mux(
 
 /////////////////////////////
 //// Clock Enable Signals
+wire paused;
 wire ce_20m, ce_dummy_10m;
 reg ce_cpu, ce_cpu_180;
 wire ce_8m, ce_16m, ce_33m;
@@ -181,7 +182,7 @@ logic ss_irq;
 logic ss_override;
 logic ss_cpu_execute;
 logic ss_reset;
-wire ss_paused = ss_pause;
+wire ss_paused = ss_pause & paused;
 
 assign ss_state_out = ss_state;
 
@@ -361,12 +362,14 @@ wire DTACKn = dtack_n;
 wire irq6;
 wire irq4;
 
+wire clocks_enabled = ~paused;
+
 //////////////////////////////////
 //// CLOCK ENABLES
 jtframe_frac_cen #(2) cen_steady
 (
     .clk(clk),
-    .cen_in(~ss_paused | ss_cpu_execute),
+    .cen_in(clocks_enabled | ss_cpu_execute),
     .n(10'd2),
     .m(10'd5),
     .cen({ce_dummy_10m, ce_20m}),
@@ -383,7 +386,7 @@ always_ff @(posedge clk) begin
     ce_cpu <= 0;
     ce_cpu_180 <= 0;
 
-    if (sdr_cpu_req == sdr_cpu_ack && (~ss_paused | ss_cpu_execute)) begin
+    if (sdr_cpu_req == sdr_cpu_ack && (clocks_enabled | ss_cpu_execute)) begin
         if (ce_cpu_count[10:1] != ce_steady_count) begin
             ce_cpu <= ~ce_cpu_count[0];
             ce_cpu_180 <= ce_cpu_count[0];
@@ -395,7 +398,7 @@ end
 jtframe_frac_cen #(3) audio_cen
 (
     .clk(clk),
-    .cen_in(~ss_paused | ss_cpu_execute),
+    .cen_in(clocks_enabled | ss_cpu_execute),
     .n(10'd464),
     .m(10'd685),
     .cen({ce_8m, ce_16m, ce_33m}),
@@ -406,7 +409,7 @@ wire ce_16khz, ce_32khz;
 jtframe_frac_cen #(2) rtc_cen
 (
     .clk(clk),
-    .cen_in(ce_8m),
+    .cen_in(ce_8m & clocks_enabled),
     .n(10'd1),
     .m(10'd228),
     .cen({ce_16khz, ce_32khz}),
@@ -693,6 +696,9 @@ IGS023 #(.SS_IDX(SSIDX_IGS023)) igs023(
     .vid_vsync(vsync),
     .vid_vblank(vblank),
 
+    .pause_req(pause | ss_pause),
+    .pause_ack(paused),
+
     .ssbus(ssb[SSIDX_IGS023])
 );
 
@@ -810,8 +816,8 @@ wire ics2115_ss_ready;
 
 ics2115 #(.SS_IDX(SSIDX_ICS2115)) ics2115(
     .clk,
-    .ce(ce_33m & !ss_paused),
-    .ce_50m(ce_50m & (!ss_paused || !ics2115_ss_ready)),
+    .ce(ce_33m & clocks_enabled),
+    .ce_50m(ce_50m & (clocks_enabled || !ics2115_ss_ready)),
     .reset_n(ics2115_reset_n),
     .host_addr(ics2115_addr),
     .host_din(ics2115_din),
