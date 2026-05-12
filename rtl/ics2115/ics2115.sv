@@ -5,9 +5,12 @@
 
 module ics2115
     import ics2115_pkg::*;
-(
+#(
+    parameter int SS_IDX = -1
+) (
     input  logic        clk,
     input  logic        ce,         // clock enable (~33.8688 MHz)
+    input  logic        ce_50m,
     input  logic        reset_n,
 
     // Host bus interface — matches one-shot port signature for testbench reuse
@@ -30,7 +33,10 @@ module ics2115
     // Audio output (parallel, directly captured by testbench)
     output logic signed [15:0] audio_left,
     output logic signed [15:0] audio_right,
-    output logic               audio_valid
+    output logic               audio_valid,
+
+    output logic               ss_ready,
+    ssbus_if.slave ssbus
 );
 
     // =========================================================================
@@ -78,6 +84,84 @@ module ics2115
     logic [31:0] osc_irq_pending;
     logic [31:0] vol_irq_en;
     logic [31:0] vol_irq_pending;
+
+    localparam int VOICE_SS_WORDS = NUM_VOICES * 8;
+    localparam int SS_STATE_BASE = VOICE_SS_WORDS;
+    localparam int SS_WORD_GLOBAL0 = SS_STATE_BASE + 0;
+    localparam int SS_WORD_GLOBAL1 = SS_STATE_BASE + 1;
+    localparam int SS_WORD_SAMPLE = SS_STATE_BASE + 2;
+    localparam int SS_WORD_TIMER0_CFG = SS_STATE_BASE + 3;
+    localparam int SS_WORD_TIMER0_COUNT = SS_STATE_BASE + 4;
+    localparam int SS_WORD_TIMER0_PERIOD = SS_STATE_BASE + 5;
+    localparam int SS_WORD_TIMER1_CFG = SS_STATE_BASE + 6;
+    localparam int SS_WORD_TIMER1_COUNT = SS_STATE_BASE + 7;
+    localparam int SS_WORD_TIMER1_PERIOD = SS_STATE_BASE + 8;
+    localparam int SS_WORD_OSC_IRQ_EN = SS_STATE_BASE + 9;
+    localparam int SS_WORD_OSC_IRQ_PENDING = SS_STATE_BASE + 10;
+    localparam int SS_WORD_VOL_IRQ_EN = SS_STATE_BASE + 11;
+    localparam int SS_WORD_VOL_IRQ_PENDING = SS_STATE_BASE + 12;
+    localparam int SS_WORD_COUNT = SS_STATE_BASE + 13;
+
+    typedef enum logic [2:0] {
+        SS_IDLE = 3'd0,
+        SS_VOICE_READ_WAIT = 3'd1,
+        SS_VOICE_READ_RESP = 3'd2,
+        SS_VOICE_WRITE_WAIT = 3'd3,
+        SS_VOICE_WRITE_COMMIT = 3'd4,
+        SS_WAIT_IDLE = 3'd5
+    } ss_state_t;
+
+    ss_state_t ss_state;
+    logic [31:0] ss_addr_latched;
+    logic [31:0] ss_data_latched;
+    logic        ss_state_write_pulse;
+    logic [31:0] ss_state_write_addr;
+    logic [31:0] ss_state_write_data;
+
+    wire ss_safe = host_fifo_empty
+                && (host_state == HOST_IDLE)
+                && !(|host_voice_wr_pending)
+                && !irqv_ram_clear_pending
+                && !(irqv_clear_osc || irqv_clear_vol)
+                && (seq_state == SEQ_IDLE);
+    assign ss_ready = ss_safe;
+
+    wire ss_access_now = ssbus.access(SS_IDX) && ss_safe;
+    wire ss_voice_access_now = ss_access_now && (ssbus.addr < VOICE_SS_WORDS[31:0]);
+    wire ss_busy_local = (ss_state != SS_IDLE) || ss_voice_access_now;
+
+    function automatic [31:0] get_voice_word(input logic [VOICE_BITS-1:0] voice, input logic [2:0] word_idx);
+        case (word_idx)
+            3'd0: get_voice_word = voice[31:0];
+            3'd1: get_voice_word = voice[63:32];
+            3'd2: get_voice_word = voice[95:64];
+            3'd3: get_voice_word = voice[127:96];
+            3'd4: get_voice_word = voice[159:128];
+            3'd5: get_voice_word = voice[191:160];
+            3'd6: get_voice_word = voice[223:192];
+            default: get_voice_word = {{(256-VOICE_BITS){1'b0}}, voice[VOICE_BITS-1:224]};
+        endcase
+    endfunction
+
+    function automatic logic [VOICE_BITS-1:0] set_voice_word(
+        input logic [VOICE_BITS-1:0] voice,
+        input logic [2:0] word_idx,
+        input logic [31:0] data
+    );
+        logic [VOICE_BITS-1:0] result;
+        result = voice;
+        case (word_idx)
+            3'd0: result[31:0] = data;
+            3'd1: result[63:32] = data;
+            3'd2: result[95:64] = data;
+            3'd3: result[127:96] = data;
+            3'd4: result[159:128] = data;
+            3'd5: result[191:160] = data;
+            3'd6: result[223:192] = data;
+            default: result[VOICE_BITS-1:224] = data[VOICE_BITS-225:0];
+        endcase
+        return result;
+    endfunction
 
     // =========================================================================
     // Global registers
@@ -147,7 +231,9 @@ module ics2115
             sample_tick        <= 1'b0;
         end else begin
             sample_tick <= 1'b0;
-            if (ce) begin
+            if (ss_state_write_pulse && ss_state_write_addr == SS_WORD_SAMPLE) begin
+                sample_div_counter <= ss_state_write_data[15:0];
+            end else if (!ss_busy_local && ce) begin
                 if (sample_div_counter >= sample_div_period - 16'd1) begin
                     sample_div_counter <= 16'd0;
                     sample_tick        <= 1'b1;
@@ -178,7 +264,9 @@ module ics2115
     always_ff @(posedge clk or negedge reset_n) begin
         if (!reset_n)
             ramp_cnt <= 9'd0;
-        else if (sample_tick)
+        else if (ss_state_write_pulse && ss_state_write_addr == SS_WORD_SAMPLE)
+            ramp_cnt <= ss_state_write_data[24:16];
+        else if (!ss_busy_local && sample_tick)
             ramp_cnt <= ramp_cnt + 9'd1;
     end
 
@@ -244,7 +332,9 @@ module ics2115
 
     ics2115_osc u_osc (
         .clk           (clk),
+        .ce            (ce_50m),
         .reset_n       (reset_n),
+        .clear         (ss_state_write_pulse || (ss_state == SS_VOICE_WRITE_COMMIT)),
         .start         (osc_start),
         .done          (osc_done),
         .irq_osc       (osc_irq_osc),
@@ -305,6 +395,16 @@ module ics2115
             audio_valid  <= 1'b0;
             seq_voice_wr <= 1'b0;
 
+            if (ss_state_write_pulse || ss_state == SS_VOICE_WRITE_COMMIT) begin
+                seq_state <= SEQ_IDLE;
+                seq_voice_idx <= 5'd0;
+                seq_voice_rd_addr <= 5'd0;
+                seq_voice_data <= default_voice_state();
+                acc_left <= 24'sd0;
+                acc_right <= 24'sd0;
+            end else if (ss_busy_local) begin
+                // Hold sequencer state while save-state bus owns the voice RAM.
+            end else begin
             case (seq_state)
                 SEQ_IDLE: begin
                     if (sample_tick) begin
@@ -385,6 +485,7 @@ module ics2115
 
                 default: seq_state <= SEQ_IDLE;
             endcase
+            end
         end
     end
 
@@ -738,14 +839,94 @@ module ics2115
             irqv_ram_clear_data.vol_ctrl[VOL_IRQ_PEND] = 1'b0;
     end
 
-    assign voice_ram_addr_b = (host_state == HOST_INIT) ? host_init_idx :
+    assign voice_ram_addr_b = ss_voice_access_now ? ssbus.addr[7:3] :
+                              (ss_state == SS_VOICE_READ_WAIT || ss_state == SS_VOICE_READ_RESP ||
+                               ss_state == SS_VOICE_WRITE_WAIT || ss_state == SS_VOICE_WRITE_COMMIT) ? ss_addr_latched[7:3] :
+                              (host_state == HOST_INIT) ? host_init_idx :
                               (host_state == HOST_WR_WAIT0 || host_state == HOST_WR_WAIT1 || host_state == HOST_WR_COMMIT) ? host_voice_wr_voice :
                               (host_state == HOST_CLR_WAIT0 || host_state == HOST_CLR_WAIT1 || host_state == HOST_CLR_COMMIT) ? irqv_ram_clear_voice :
                               osc_select;
-    assign voice_ram_wren_b = (host_state == HOST_INIT) || (host_state == HOST_WR_COMMIT) || (host_state == HOST_CLR_COMMIT);
-    assign voice_ram_data_b = (host_state == HOST_INIT) ? voice_state_t'(default_voice_state()) :
+    assign voice_ram_wren_b = (ss_state == SS_VOICE_WRITE_COMMIT) ||
+                              ((host_state == HOST_INIT) || (host_state == HOST_WR_COMMIT) || (host_state == HOST_CLR_COMMIT)) && !ss_busy_local;
+    assign voice_ram_data_b = (ss_state == SS_VOICE_WRITE_COMMIT) ? set_voice_word(voice_ram_q_b, ss_addr_latched[2:0], ss_data_latched) :
+                              (host_state == HOST_INIT) ? voice_state_t'(default_voice_state()) :
                               (host_state == HOST_CLR_COMMIT) ? voice_state_t'(irqv_ram_clear_data) :
                               voice_state_t'(host_voice_wr_data);
+
+    always_ff @(posedge clk or negedge reset_n) begin
+        if (!reset_n) begin
+            ss_state <= SS_IDLE;
+            ss_addr_latched <= 32'd0;
+            ss_data_latched <= 32'd0;
+            ss_state_write_pulse <= 1'b0;
+            ss_state_write_addr <= 32'd0;
+            ss_state_write_data <= 32'd0;
+        end else begin
+            ss_state_write_pulse <= 1'b0;
+            ssbus.setup(SS_IDX, SS_WORD_COUNT[31:0], 2);
+
+            case (ss_state)
+                SS_IDLE: begin
+                    if (ss_access_now) begin
+                        ss_addr_latched <= ssbus.addr;
+                        ss_data_latched <= ssbus.data[31:0];
+                        if (ssbus.addr < VOICE_SS_WORDS[31:0]) begin
+                            ss_state <= ssbus.write ? SS_VOICE_WRITE_WAIT : SS_VOICE_READ_WAIT;
+                        end else if (ssbus.write) begin
+                            ss_state_write_pulse <= 1'b1;
+                            ss_state_write_addr <= ssbus.addr;
+                            ss_state_write_data <= ssbus.data[31:0];
+                            ssbus.write_ack(SS_IDX);
+                            ss_state <= SS_WAIT_IDLE;
+                        end else begin
+                            case (ssbus.addr)
+                                SS_WORD_GLOBAL0: ssbus.read_response(SS_IDX, {32'd0, 8'd0, vmode, reg_select, osc_select, active_osc});
+                                SS_WORD_GLOBAL1: ssbus.read_response(SS_IDX, {32'd0, 8'd0, irq_enabled, irq_pending});
+                                SS_WORD_SAMPLE: ssbus.read_response(SS_IDX, {32'd0, 7'd0, ramp_cnt, sample_div_counter});
+                                SS_WORD_TIMER0_CFG: ssbus.read_response(SS_IDX, {32'd0, 15'd0, timer_running[0], timer_scale[0], timer_preset[0]});
+                                SS_WORD_TIMER0_COUNT: ssbus.read_response(SS_IDX, {40'd0, timer_count[0]});
+                                SS_WORD_TIMER0_PERIOD: ssbus.read_response(SS_IDX, {40'd0, timer_period[0]});
+                                SS_WORD_TIMER1_CFG: ssbus.read_response(SS_IDX, {32'd0, 15'd0, timer_running[1], timer_scale[1], timer_preset[1]});
+                                SS_WORD_TIMER1_COUNT: ssbus.read_response(SS_IDX, {40'd0, timer_count[1]});
+                                SS_WORD_TIMER1_PERIOD: ssbus.read_response(SS_IDX, {40'd0, timer_period[1]});
+                                SS_WORD_OSC_IRQ_EN: ssbus.read_response(SS_IDX, {32'd0, osc_irq_en});
+                                SS_WORD_OSC_IRQ_PENDING: ssbus.read_response(SS_IDX, {32'd0, osc_irq_pending});
+                                SS_WORD_VOL_IRQ_EN: ssbus.read_response(SS_IDX, {32'd0, vol_irq_en});
+                                SS_WORD_VOL_IRQ_PENDING: ssbus.read_response(SS_IDX, {32'd0, vol_irq_pending});
+                                default: ssbus.read_response(SS_IDX, 64'd0);
+                            endcase
+                            ss_state <= SS_WAIT_IDLE;
+                        end
+                    end
+                end
+
+                SS_VOICE_READ_WAIT: begin
+                    ss_state <= SS_VOICE_READ_RESP;
+                end
+
+                SS_VOICE_READ_RESP: begin
+                    ssbus.read_response(SS_IDX, {32'd0, get_voice_word(voice_ram_q_b, ss_addr_latched[2:0])});
+                    ss_state <= SS_WAIT_IDLE;
+                end
+
+                SS_VOICE_WRITE_WAIT: begin
+                    ss_state <= SS_VOICE_WRITE_COMMIT;
+                end
+
+                SS_VOICE_WRITE_COMMIT: begin
+                    ssbus.write_ack(SS_IDX);
+                    ss_state <= SS_WAIT_IDLE;
+                end
+
+                SS_WAIT_IDLE: begin
+                    if (!(ssbus.read || ssbus.write))
+                        ss_state <= SS_IDLE;
+                end
+
+                default: ss_state <= SS_IDLE;
+            endcase
+        end
+    end
 
     // =========================================================================
     // Global register, host command, and voice RAM sideband block
@@ -789,6 +970,49 @@ module ics2115
                 timer_running[i]  <= 1'b0;
             end
         end else begin
+            if (ss_state_write_pulse) begin
+                host_voice_wr_pending <= 2'b00;
+                host_fifo_head <= '0;
+                host_fifo_tail <= '0;
+                host_fifo_count <= '0;
+                irqv_ram_clear_pending <= 1'b0;
+                host_state <= HOST_IDLE;
+                irqv_clear_osc <= 1'b0;
+                irqv_clear_vol <= 1'b0;
+                timer_irq_clear[0] <= 1'b0;
+                timer_irq_clear[1] <= 1'b0;
+                case (ss_state_write_addr)
+                    SS_WORD_GLOBAL0: begin
+                        active_osc <= ss_state_write_data[4:0];
+                        osc_select <= ss_state_write_data[9:5];
+                        reg_select <= ss_state_write_data[17:10];
+                        vmode <= ss_state_write_data[25:18];
+                    end
+                    SS_WORD_GLOBAL1: begin
+                        irq_pending <= ss_state_write_data[7:0];
+                        irq_enabled <= ss_state_write_data[15:8];
+                    end
+                    SS_WORD_TIMER0_CFG: begin
+                        timer_preset[0] <= ss_state_write_data[7:0];
+                        timer_scale[0] <= ss_state_write_data[15:8];
+                        timer_running[0] <= ss_state_write_data[16];
+                    end
+                    SS_WORD_TIMER0_COUNT: timer_count[0] <= ss_state_write_data[23:0];
+                    SS_WORD_TIMER0_PERIOD: timer_period[0] <= ss_state_write_data[23:0];
+                    SS_WORD_TIMER1_CFG: begin
+                        timer_preset[1] <= ss_state_write_data[7:0];
+                        timer_scale[1] <= ss_state_write_data[15:8];
+                        timer_running[1] <= ss_state_write_data[16];
+                    end
+                    SS_WORD_TIMER1_COUNT: timer_count[1] <= ss_state_write_data[23:0];
+                    SS_WORD_TIMER1_PERIOD: timer_period[1] <= ss_state_write_data[23:0];
+                    SS_WORD_OSC_IRQ_EN: osc_irq_en <= ss_state_write_data;
+                    SS_WORD_OSC_IRQ_PENDING: osc_irq_pending <= ss_state_write_data;
+                    SS_WORD_VOL_IRQ_EN: vol_irq_en <= ss_state_write_data;
+                    SS_WORD_VOL_IRQ_PENDING: vol_irq_pending <= ss_state_write_data;
+                    default: ;
+                endcase
+            end else if (!ss_busy_local) begin
 
             if (host_state == HOST_INIT) begin
                 if (host_init_idx == 5'd31) begin
@@ -971,6 +1195,7 @@ module ics2115
                         end
                     end
                 end
+            end
             end
         end
     end

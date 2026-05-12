@@ -430,7 +430,7 @@ fx68k m68000(
     .FC0(cpu_fc[0]), .FC1(cpu_fc[1]), .FC2(cpu_fc[2]),
     .BGn(cpu_bg_n),
     .oRESETn(), .oHALTEDn(),
-    .DTACKn(DTACKn), .VPAn(IACKn),
+    .DTACKn(DTACKn | ~IACKn), .VPAn(IACKn),
     .BERRn(1),
     .BRn(cpu_br_n), .BGACKn(cpu_bgack_n),
     .IPL0n(IPLn[0]), .IPL1n(IPLn[1]), .IPL2n(IPLn[2]),
@@ -806,9 +806,12 @@ V3021 v3021(
 );
 
 
-ics2115 ics2115(
+wire ics2115_ss_ready;
+
+ics2115 #(.SS_IDX(SSIDX_ICS2115)) ics2115(
     .clk,
-    .ce(ce_33m),
+    .ce(ce_33m & !ss_paused),
+    .ce_50m(ce_50m & (!ss_paused || !ics2115_ss_ready)),
     .reset_n(ics2115_reset_n),
     .host_addr(ics2115_addr),
     .host_din(ics2115_din),
@@ -827,7 +830,10 @@ ics2115 ics2115(
 
     .audio_left(ics2115_audio_left),
     .audio_right(ics2115_audio_right),
-    .audio_valid(ics2115_audio_valid)
+    .audio_valid(ics2115_audio_valid),
+
+    .ss_ready(ics2115_ss_ready),
+    .ssbus(ssb[SSIDX_ICS2115])
 );
 
 assign audio_out = ics2115_audio_left;

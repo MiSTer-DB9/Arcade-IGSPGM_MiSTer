@@ -7,6 +7,7 @@ package system_consts;
     parameter int SSIDX_Z80_RAM = 5;
     parameter int SSIDX_Z80 = 6;
     parameter int SSIDX_IGS026_X = 7;
+    parameter int SSIDX_ICS2115 = 8;
 
     parameter bit [31:0] SS_DDR_BASE         = 32'h3E00_0000;
     parameter bit [31:0] CART_A_ROM_DDR_BASE = 32'h3800_0000;

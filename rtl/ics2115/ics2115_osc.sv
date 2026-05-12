@@ -13,7 +13,9 @@ module ics2115_osc
     import ics2115_pkg::*;
 (
     input  logic        clk,
+    input  logic        ce,
     input  logic        reset_n,
+    input  logic        clear,
 
     // Control interface
     input  logic        start,          // pulse to begin processing
@@ -187,7 +189,7 @@ module ics2115_osc
     // FSM — registered data processing
     // =========================================================================
     always_ff @(posedge clk or negedge reset_n) begin
-        if (!reset_n) begin
+        if (!reset_n || clear) begin
             state         <= ST_IDLE;
             done          <= 1'b0;
             audio_valid   <= 1'b0;
@@ -212,7 +214,7 @@ module ics2115_osc
             ulaw_tbl_addr <= 8'd0;
             v             <= '0;
             vol_add       <= 15'd0;
-        end else begin
+        end else if (ce) begin
             // Defaults — pulsed signals cleared each cycle
             done        <= 1'b0;
             audio_valid <= 1'b0;
