@@ -87,6 +87,12 @@ struct MemoryReadResult
     std::vector<uint8_t> mData;
 };
 
+struct DebugLinkReadResult
+{
+    std::vector<uint8_t> mData;
+    uint32_t mAvailable = 0;
+};
+
 struct SignalReadResult
 {
     std::string mSignal;
@@ -254,6 +260,10 @@ class SimController
     ControllerResult<MemoryReadResult> ReadMemory(const std::string &region, uint32_t address, uint32_t size) const;
     ControllerResult<EmptyResult> WriteMemory(const std::string &region, uint32_t address, const std::vector<uint8_t> &data);
     ControllerResult<std::vector<std::string>> ListRegions() const;
+    ControllerResult<EmptyResult> DebugLinkStart(uint32_t commsWordAddr = 0x1F800);
+    ControllerResult<EmptyResult> DebugLinkStop();
+    ControllerResult<EmptyResult> DebugLinkWrite(const std::vector<uint8_t> &data, uint64_t timeoutCyclesPerByte = 2000000);
+    ControllerResult<DebugLinkReadResult> DebugLinkRead(uint32_t maxBytes, uint32_t minBytes = 0, uint64_t timeoutCycles = 2000000);
     ControllerResult<SignalReadResult> ReadSignal(const std::string &signal) const;
     ControllerResult<SignalListResult> ListSignals() const;
 
@@ -276,6 +286,8 @@ class SimController
     ControllerResult<ScreenshotResult> SaveScreenshot(const std::string &path);
     ControllerResult<GuiStateResult> GetGuiState() const;
     ControllerResult<Ics2115DebugState> GetIcs2115DebugState() const;
+    ControllerResult<EmptyResult> SetIcs2115VoiceState(uint32_t index, const Ics2115VoiceState &voice);
+    ControllerResult<EmptyResult> SetIcs2115GlobalRegister(const std::string &name, uint32_t value);
     ControllerResult<GuiOverrideResult> SetGuiOverrideByIndex(uint32_t index, uint16_t value, bool pulse = false);
     ControllerResult<GuiOverrideResult> SetGuiOverrideByLabel(const std::string &label, uint16_t value, bool pulse = false);
 

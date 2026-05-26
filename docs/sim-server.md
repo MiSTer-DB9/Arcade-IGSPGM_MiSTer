@@ -719,6 +719,22 @@ Each voice record includes:
 - volume fields: `vol_acc`, `vol_start`, `vol_end`, `vol_incr`, `vol_pan`, `vol_ctrl`, `vol_mode`
 - runtime fields: `state_on`
 
+### `ics2115.write_voice`
+
+Simulator-native debug method used by `util/ics2115_remote.py` simulator mode. It directly updates one decoded voice RAM entry using the same internal fields returned by `ics2115.get_state`.
+
+Request fields: `index`, `osc_acc`, `osc_fc`, `osc_start`, `osc_end`, `osc_saddr`, `osc_conf`, `osc_ctl`, `vol_acc`, `vol_start`, `vol_end`, `vol_incr`, `vol_pan`, `vol_ctrl`, `vol_mode`, `state_on`.
+
+### `ics2115.write_global`
+
+Simulator-native debug method for selected global fields.
+
+```json
+{"id":31,"method":"ics2115.write_global","params":{"name":"active_osc","value":31}}
+```
+
+Supported names: `active_osc`, `osc_select`, `reg_select`, `mode`/`vmode`, `irq_enable`/`irq_enabled`.
+
 ## TestROM GUI mirroring
 
 When a test ROM exports `gui_data` in `WORK_RAM` at `0x0a00`, the simulator checks it on each vblank and mirrors it into an ImGui window named `TestROM GUI`.

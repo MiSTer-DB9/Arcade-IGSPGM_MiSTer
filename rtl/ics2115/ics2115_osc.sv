@@ -116,12 +116,11 @@ module ics2115_osc
         end
     end
 
+    logic [28:0] osc_save;
+
     // =========================================================================
     // Combinational signals for boundary/interpolation/mix
     // =========================================================================
-    logic voice_playing;
-    assign voice_playing = v.state_on && !v.osc_conf[OSC_STOP];
-
     // Boundary check: osc_left = distance to boundary (signed)
     logic signed [29:0] osc_left;
     always_comb begin
@@ -290,7 +289,7 @@ module ics2115_osc
 
                     // Compute next_addr for interpolation
                     // If near loop end (forward, non-bidir), wrap to start[28:9]
-                    if (v.state_on && v.osc_conf[OSC_LOOP] && !v.osc_conf[OSC_BIDIR] &&
+                    if (v.osc_conf[OSC_LOOP] && !v.osc_conf[OSC_BIDIR] &&
                         (osc_left_pre < $signed({15'd0, v.osc_fc[15:1]})))
                     begin
                         next_addr <= v.osc_start[28:9];
@@ -427,7 +426,7 @@ module ics2115_osc
                 // MIX: Scale interpolated sample by volume, output audio
                 // ─────────────────────────────────────────────────────────────
                 ST_MIX: begin
-                    if (voice_playing) begin
+                    if (!v.osc_ctl[OSC_STOP]) begin
                         audio_left  <= mix_l >>> 15;
                         audio_right <= mix_r >>> 15;
                     end else begin
@@ -443,7 +442,8 @@ module ics2115_osc
                 // equivalent to fc>>1 in 29-bit space. Step = fc[15:1].
                 // ─────────────────────────────────────────────────────────────
                 ST_OSC_UPDATE: begin
-                    if (voice_playing) begin
+                    osc_save <= v.osc_acc;
+                    if (!v.osc_ctl[OSC_STOP] && !v.osc_ctl[OSC_DONE]) begin
                         if (v.osc_conf[OSC_INVERT])
                             v.osc_acc <= v.osc_acc - {14'd0, v.osc_fc[15:1]};
                         else
@@ -456,7 +456,7 @@ module ics2115_osc
                 // osc_left is computed combinationally from current v state
                 // ─────────────────────────────────────────────────────────────
                 ST_BOUNDARY_CHECK: begin
-                    if (voice_playing && (osc_left <= 30'sd0)) begin
+                    if (!v.osc_ctl[OSC_STOP] && !v.osc_ctl[OSC_DONE] && (osc_left <= 30'sd0)) begin
                         // Fire IRQ if enabled
                         if (v.osc_conf[OSC_IRQ]) begin
                             v.osc_conf[OSC_IRQ_PEND] <= 1'b1;
@@ -480,12 +480,12 @@ module ics2115_osc
                             end
                         end else begin
                             // One-shot: stop voice, clamp to boundary
-                            v.state_on <= 1'b0;
-                            v.osc_conf[OSC_STOP] <= 1'b1;
-                            if (!v.osc_conf[OSC_INVERT])
+                            v.osc_ctl[OSC_DONE] <= 1'b1;
+                            v.osc_acc <= osc_save;
+                            /*if (!v.osc_conf[OSC_INVERT])
                                 v.osc_acc <= v.osc_end;
                             else
-                                v.osc_acc <= v.osc_start;
+                                v.osc_acc <= v.osc_start;*/
                         end
                     end
                 end
@@ -505,9 +505,9 @@ module ics2115_osc
 
                         // Update accumulator: add or subtract vol_add (zero-extended to 26 bits)
                         if (v.vol_ctrl[VOL_INVERT]) begin
-                            v.vol_acc <= v.vol_acc - {11'd0, v.vol_incr[5:0], 9'd0};
+                            v.vol_acc <= v.vol_acc - {4'd0, v.vol_incr[5:0], 16'd0};
                         end else begin
-                            v.vol_acc <= v.vol_acc + {11'd0, v.vol_incr[5:0], 9'd0};
+                            v.vol_acc <= v.vol_acc + {4'd0, v.vol_incr[5:0], 16'd0};
                         end
                     end
                 end

@@ -17,6 +17,7 @@
 
 #include <cstring>
 #include <cstdio>
+#include <algorithm>
 
 // Global instance
 SimCore gSimCore;
@@ -24,6 +25,13 @@ SimCore gSimCore;
 namespace
 {
 bool gPrevVblank = false;
+constexpr uint32_t DEBUG_LINK_ROM_MASK = (1024 * 1024) - 1;
+constexpr uint32_t DEBUG_LINK_ACTIVE_V_OFF = 5;
+constexpr uint32_t DEBUG_LINK_PENDING_V_OFF = 9;
+constexpr uint32_t DEBUG_LINK_IN_SEQ_V_OFF = 13;
+constexpr uint32_t DEBUG_LINK_OUT_SEQ_V_OFF = 17;
+constexpr uint32_t DEBUG_LINK_IN_BYTE_V_OFF = 1025;
+constexpr uint32_t DEBUG_LINK_OUT_AREA_OFF = 1536;
 }
 
 // SimCore implementation
@@ -67,6 +75,16 @@ void SimCore::Init()
 
     mGfxCache = std::make_unique<GfxCache>();
     mAudioCapture = std::make_unique<SimAudioCapture>();
+    mDebugLinkEnabled = false;
+    mDebugLinkBaseByte = 0;
+    mDebugLinkInSeq = 0;
+    mDebugLinkOutSeq = 0;
+    mDebugLinkPrevInByteRead = false;
+    mDebugLinkPrevOutRead = false;
+    mDebugLinkInByteReadPulse = false;
+    mDebugLinkTxOutstanding = false;
+    mDebugLinkTx.clear();
+    mDebugLinkRx.clear();
     Ics2115DebugUiReset();
     GetTestRomGuiWindow().Reset();
     gPrevVblank = false;
@@ -120,6 +138,7 @@ TickResult SimCore::TickOneCycle()
                             static_cast<int16_t>(mTop->rootp->PGM_SIGNAL(ics2115_audio_right)));
     }
     Ics2115DebugUiTick();
+    DebugLinkTick();
 
     const bool vblank = mTop->vblank != 0;
     if (vblank && !gPrevVblank)
@@ -143,6 +162,153 @@ TickResult SimCore::TickOneCycle()
     }
 
     return {TickStopReason::COMPLETED, 1};
+}
+
+void SimCore::DebugLinkWriteByte(uint32_t offset, uint8_t value)
+{
+    if (!mDebugLinkEnabled)
+        return;
+    Memory(MemoryRegion::BIOS_PROG_ROM).Write((mDebugLinkBaseByte + offset) & DEBUG_LINK_ROM_MASK, 1, &value);
+}
+
+void SimCore::DebugLinkStart(uint32_t commsWordAddr)
+{
+    // The PicoROM API names the 68000 ROM word address.  The TestROM reads
+    // this through the normal program-ROM bus, so the simulator emulates
+    // PicoROM by patching the BIOS ROM slice and watching CPU ROM reads.
+    mDebugLinkBaseByte = (commsWordAddr << 1) & DEBUG_LINK_ROM_MASK;
+    mDebugLinkEnabled = true;
+    mDebugLinkInSeq = 0;
+    mDebugLinkOutSeq = 0;
+    mDebugLinkPrevInByteRead = false;
+    mDebugLinkPrevOutRead = false;
+    mDebugLinkInByteReadPulse = false;
+    mDebugLinkTxOutstanding = false;
+    mDebugLinkTx.clear();
+    mDebugLinkRx.clear();
+
+    const uint8_t magic[4] = {'I', 'P', 'O', 'C'};
+    Memory(MemoryRegion::BIOS_PROG_ROM).Write(mDebugLinkBaseByte, sizeof(magic), magic);
+    DebugLinkWriteByte(DEBUG_LINK_ACTIVE_V_OFF, 1);
+    DebugLinkWriteByte(DEBUG_LINK_PENDING_V_OFF, 0);
+    DebugLinkWriteByte(DEBUG_LINK_IN_SEQ_V_OFF, mDebugLinkInSeq);
+    DebugLinkWriteByte(DEBUG_LINK_OUT_SEQ_V_OFF, mDebugLinkOutSeq);
+    DebugLinkWriteByte(DEBUG_LINK_IN_BYTE_V_OFF, 0);
+}
+
+void SimCore::DebugLinkStop()
+{
+    if (mDebugLinkEnabled)
+        DebugLinkWriteByte(DEBUG_LINK_ACTIVE_V_OFF, 0);
+    mDebugLinkEnabled = false;
+    mDebugLinkPrevInByteRead = false;
+    mDebugLinkPrevOutRead = false;
+    mDebugLinkInByteReadPulse = false;
+    mDebugLinkTxOutstanding = false;
+    mDebugLinkTx.clear();
+    mDebugLinkRx.clear();
+}
+
+bool SimCore::DebugLinkEnabled() const
+{
+    return mDebugLinkEnabled;
+}
+
+void SimCore::DebugLinkPrimeTx()
+{
+    if (!mDebugLinkEnabled || mDebugLinkTxOutstanding || mDebugLinkTx.empty())
+        return;
+    const uint8_t value = mDebugLinkTx.front();
+    mDebugLinkTx.pop_front();
+    DebugLinkWriteByte(DEBUG_LINK_IN_BYTE_V_OFF, value);
+    mDebugLinkInSeq++;
+    DebugLinkWriteByte(DEBUG_LINK_IN_SEQ_V_OFF, mDebugLinkInSeq);
+    mDebugLinkTxOutstanding = true;
+}
+
+void SimCore::DebugLinkTick()
+{
+    if (!mDebugLinkEnabled || !mTop)
+        return;
+
+    const uint32_t byteAddr = mTop->rootp->PGM_SIGNAL(cpu_word_addr) & DEBUG_LINK_ROM_MASK;
+    const uint8_t ds = mTop->rootp->PGM_SIGNAL(address_translator, cpu_ds_n);
+    const bool lowByte = (ds & 1) == 0;
+    const bool highByte = (ds & 2) == 0;
+
+    const uint32_t inByteAddr = (mDebugLinkBaseByte + DEBUG_LINK_IN_BYTE_V_OFF) & ~1u;
+    const bool inByteRead = lowByte && (byteAddr == inByteAddr);
+    if (inByteRead && !mDebugLinkPrevInByteRead)
+    {
+        mDebugLinkInByteReadPulse = true;
+        if (mDebugLinkTxOutstanding)
+            mDebugLinkTxOutstanding = false;
+        DebugLinkPrimeTx();
+    }
+    mDebugLinkPrevInByteRead = inByteRead;
+
+    const uint32_t outAreaByte = (mDebugLinkBaseByte + DEBUG_LINK_OUT_AREA_OFF) & DEBUG_LINK_ROM_MASK;
+    const bool outRead = (lowByte || highByte) && (byteAddr >= outAreaByte) && (byteAddr < outAreaByte + 512) && (((byteAddr - outAreaByte) & 1u) == 0);
+    if (outRead && !mDebugLinkPrevOutRead)
+    {
+        const uint8_t value = static_cast<uint8_t>((byteAddr - outAreaByte) >> 1);
+        mDebugLinkRx.push_back(value);
+        mDebugLinkOutSeq++;
+        DebugLinkWriteByte(DEBUG_LINK_OUT_SEQ_V_OFF, mDebugLinkOutSeq);
+    }
+    mDebugLinkPrevOutRead = outRead;
+}
+
+bool SimCore::DebugLinkWrite(const std::vector<uint8_t> &data, uint64_t timeoutCyclesPerByte)
+{
+    if (!mDebugLinkEnabled)
+        DebugLinkStart();
+
+    for (uint8_t value : data)
+        mDebugLinkTx.push_back(value);
+    DebugLinkPrimeTx();
+
+    const uint64_t timeoutCycles = timeoutCyclesPerByte * std::max<size_t>(data.size(), 1);
+    uint64_t elapsed = 0;
+    while (!mDebugLinkTx.empty() || mDebugLinkTxOutstanding)
+    {
+        if (timeoutCycles && elapsed >= timeoutCycles)
+            return false;
+        TickResult tickResult = Tick(64);
+        elapsed += tickResult.mTicksExecuted;
+        if (!tickResult.Succeeded())
+            return false;
+    }
+    return true;
+}
+
+std::vector<uint8_t> SimCore::DebugLinkRead(uint32_t maxBytes, uint32_t minBytes, uint64_t timeoutCycles)
+{
+    if (!mDebugLinkEnabled)
+        DebugLinkStart();
+    if (minBytes > maxBytes)
+        minBytes = maxBytes;
+
+    uint64_t elapsed = 0;
+    while (mDebugLinkRx.size() < minBytes)
+    {
+        if (timeoutCycles && elapsed >= timeoutCycles)
+            break;
+        TickResult tickResult = Tick(64);
+        elapsed += tickResult.mTicksExecuted;
+        if (!tickResult.Succeeded())
+            break;
+    }
+
+    const uint32_t count = std::min<uint32_t>(maxBytes, static_cast<uint32_t>(mDebugLinkRx.size()));
+    std::vector<uint8_t> out;
+    out.reserve(count);
+    for (uint32_t i = 0; i < count; i++)
+    {
+        out.push_back(mDebugLinkRx.front());
+        mDebugLinkRx.pop_front();
+    }
+    return out;
 }
 
 TickResult SimCore::Tick(int count)

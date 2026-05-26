@@ -16,8 +16,13 @@ from __future__ import annotations
 
 import dataclasses
 import enum
+import json
+import os
 import struct
+import subprocess
+import tempfile
 import time
+from pathlib import Path
 from typing import Any, Optional
 
 REQ_MAGIC = b"IC"
@@ -45,7 +50,7 @@ WIDTH_16 = 0
 WIDTH_UPPER8 = 1
 WIDTH_LOWER8 = 2
 
-VOICE_FIELDS_STRUCT = struct.Struct(">BHHBHBBBBHHHBBBB")
+VOICE_FIELDS_STRUCT = struct.Struct(">BHHBHBBBBHHHBBBBB")
 VOICE_SIZE = 24
 VOICE_RESERVED_SIZE = VOICE_SIZE - VOICE_FIELDS_STRUCT.size
 
@@ -95,9 +100,9 @@ _add_reg(VOICE_REGISTERS, "osc_start_hi", 0x02, WIDTH_16, "OSC_START_H", "start_
 _add_reg(VOICE_REGISTERS, "osc_start_lo", 0x03, WIDTH_UPPER8, "OSC_START_L", "start_lo")
 _add_reg(VOICE_REGISTERS, "osc_end_hi", 0x04, WIDTH_16, "OSC_END_H", "end_hi")
 _add_reg(VOICE_REGISTERS, "osc_end_lo", 0x05, WIDTH_UPPER8, "OSC_END_L", "end_lo")
-_add_reg(VOICE_REGISTERS, "vol_incr", 0x06, WIDTH_LOWER8, "VOL_INCR")
-_add_reg(VOICE_REGISTERS, "vol_start", 0x07, WIDTH_LOWER8, "VOL_START")
-_add_reg(VOICE_REGISTERS, "vol_end", 0x08, WIDTH_LOWER8, "VOL_END")
+_add_reg(VOICE_REGISTERS, "vol_incr", 0x06, WIDTH_UPPER8, "VOL_INCR")
+_add_reg(VOICE_REGISTERS, "vol_start", 0x07, WIDTH_UPPER8, "VOL_START")
+_add_reg(VOICE_REGISTERS, "vol_end", 0x08, WIDTH_UPPER8, "VOL_END")
 _add_reg(VOICE_REGISTERS, "vol_acc", 0x09, WIDTH_16, "VOL_ACC")
 _add_reg(VOICE_REGISTERS, "osc_acc_hi", 0x0A, WIDTH_16, "OSC_ACC_H", "acc_hi")
 _add_reg(VOICE_REGISTERS, "osc_acc_lo", 0x0B, WIDTH_16, "OSC_ACC_L", "acc_lo")
@@ -105,10 +110,10 @@ _add_reg(VOICE_REGISTERS, "pan", 0x0C, WIDTH_UPPER8, "PAN", "vol_pan")
 _add_reg(VOICE_REGISTERS, "vol_ctrl", 0x0D, WIDTH_UPPER8, "VOL_CTRL")
 _add_reg(VOICE_REGISTERS, "osc_ctl", 0x10, WIDTH_UPPER8, "OSC_CTL", "control")
 _add_reg(VOICE_REGISTERS, "osc_saddr", 0x11, WIDTH_UPPER8, "OSC_SADDR", "saddr")
+_add_reg(VOICE_REGISTERS, "vmode", 0x12, WIDTH_UPPER8, "VMode", "VMODE", "mode", "vol_mode")
 
 _add_reg(GLOBAL_REGISTERS, "active_osc", 0x0E, WIDTH_UPPER8, "ACTIVE_OSC")
 _add_reg(GLOBAL_REGISTERS, "irqv", 0x0F, WIDTH_UPPER8, "IRQV")
-_add_reg(GLOBAL_REGISTERS, "mode", 0x12, WIDTH_LOWER8, "MODE")
 _add_reg(GLOBAL_REGISTERS, "timer0", 0x40, WIDTH_LOWER8, "TIMER0")
 _add_reg(GLOBAL_REGISTERS, "timer1", 0x41, WIDTH_LOWER8, "TIMER1")
 _add_reg(GLOBAL_REGISTERS, "timer_scale0", 0x42, WIDTH_LOWER8, "TIMER_SCALE0")
@@ -117,6 +122,36 @@ _add_reg(GLOBAL_REGISTERS, "irq_enable", 0x4A, WIDTH_LOWER8, "IRQ_ENABLE")
 _add_reg(GLOBAL_REGISTERS, "memory_config", 0x4C, WIDTH_LOWER8, "MEMORY_CONFIG")
 _add_reg(GLOBAL_REGISTERS, "system_control", 0x4D, WIDTH_LOWER8, "SYSTEM_CONTROL", "SYS")
 _add_reg(GLOBAL_REGISTERS, "osc_select", 0x4F, WIDTH_LOWER8, "OSC_SELECT")
+
+
+class OscConf:
+    IRQPending = 0x80
+    Reverse = 0x40
+    IRQEnable = 0x20
+    Bidir = 0x10
+    Loop = 0x08
+    Unknown = 0x04
+    WhiteNoise = 0x03
+    Linear16 = 0x02
+    ULaw8 = 0x01
+    Linear8 = 0x00
+
+
+class OscCtl:
+    Hold = 0x02
+    KeyOff = 0x0f
+    KeyOn = 0x00
+
+
+class VCtl:
+    IRQPending = 0x80
+    Reverse = 0x40
+    IRQEnable = 0x20
+    Bidir = 0x10
+    Loop = 0x08
+    Rollover = 0x04
+    Stop = 0x02
+    Done = 0x01
 
 
 @dataclasses.dataclass
@@ -137,6 +172,7 @@ class Voice:
     vol_ctrl: int = 0
     osc_ctl: int = 0
     osc_saddr: int = 0
+    vmode: int = 0
 
     @classmethod
     def unpack(cls, data: bytes) -> "Voice":
@@ -162,6 +198,7 @@ class Voice:
             self.vol_ctrl & 0xFF,
             self.osc_ctl & 0xFF,
             self.osc_saddr & 0xFF,
+            self.vmode & 0xFF,
         )
         return fields + (b"\x00" * VOICE_RESERVED_SIZE)
 
@@ -185,6 +222,7 @@ class Voice:
             vol_ctrl=0x03,
             osc_ctl=0x00,
             osc_saddr=0x40,
+            vmode=0x00,
         )
 
     @property
@@ -278,6 +316,349 @@ class IRQCounts:
     spurious: int
 
 
+class SimServerError(ICSRemoteError):
+    pass
+
+
+class SimServerClient:
+    """Small stdio JSON client for sim/sim --server."""
+
+    def __init__(self, proc: subprocess.Popen[str], *, cwd: str | Path):
+        self.proc = proc
+        self.cwd = Path(cwd)
+        self._next_id = 0
+
+    @classmethod
+    def start(cls, executable: str | Path = "./sim", *, cwd: str | Path = "sim") -> "SimServerClient":
+        proc = subprocess.Popen(
+            [str(executable), "--server"],
+            cwd=str(cwd),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
+        return cls(proc, cwd=cwd)
+
+    def call(self, method: str, params: Optional[dict[str, Any]] = None) -> Any:
+        if self.proc.stdin is None or self.proc.stdout is None:
+            raise SimServerError("simulator server pipes are closed")
+        self._next_id += 1
+        req = {"id": self._next_id, "method": method, "params": params or {}}
+        self.proc.stdin.write(json.dumps(req) + "\n")
+        self.proc.stdin.flush()
+        line = self.proc.stdout.readline()
+        if not line:
+            stderr = ""
+            if self.proc.stderr is not None:
+                try:
+                    stderr = self.proc.stderr.read()
+                except Exception:
+                    pass
+            raise SimServerError(f"simulator server closed stdout; stderr={stderr!r}")
+        rsp = json.loads(line)
+        if not rsp.get("ok"):
+            err = rsp.get("error", {})
+            raise SimServerError(f"{method} failed: {err.get('code')}: {err.get('message')}")
+        return rsp.get("result", {})
+
+    def close(self) -> None:
+        try:
+            if self.proc.poll() is None:
+                try:
+                    self.call("sim.shutdown")
+                except Exception:
+                    pass
+                self.proc.terminate()
+                try:
+                    self.proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    self.proc.kill()
+        finally:
+            for stream in (self.proc.stdin, self.proc.stdout, self.proc.stderr):
+                try:
+                    if stream is not None:
+                        stream.close()
+                except Exception:
+                    pass
+
+
+class SimAudioCaptureReader:
+    """Simulator audio capture adapter with the AudioStreamReader subset used here."""
+
+    def __init__(self, sim: SimServerClient, *, sample_rate: int = 33074):
+        self.sim = sim
+        self.sample_rate_hz = sample_rate
+        self.latest_samples: list[tuple[int, int]] = []
+
+    def close(self) -> None:
+        pass
+
+    def _capture_for_cycles(self, cycles: int) -> list[tuple[int, int]]:
+        try:
+            from .capture_audio import AudioStreamReader
+        except ImportError:
+            from capture_audio import AudioStreamReader  # type: ignore
+
+        fd, path = tempfile.mkstemp(prefix="pgm_sim_audio_", suffix=".bin")
+        os.close(fd)
+        try:
+            self.sim.call("audio_capture.start", {"filename": path})
+            self.sim.call("sim.run_cycles", {"count": cycles * 2})
+            self.sim.call("audio_capture.stop")
+            reader = AudioStreamReader.from_file(path)
+            blocks = reader.read_audio_blocks(1_000_000, timeout=None)
+            samples: list[tuple[int, int]] = []
+            for block in blocks:
+                samples.extend(block.samples)
+            self.latest_samples.extend(samples)
+            return samples
+        finally:
+            try:
+                os.unlink(path)
+            except FileNotFoundError:
+                pass
+
+    def capture_frames(self, count: int, *, timeout: Optional[float] = None) -> list[tuple[int, int]]:
+        del timeout
+        # The simulator is much slower than hardware; use deterministic simulated
+        # time instead of wall-clock timeouts.  50 MHz / 33074 Hz ~= 1512 cycles.
+        cycles = max(1, int((count * 50_000_000 + self.sample_rate_hz - 1) // self.sample_rate_hz) + 20_000)
+        return self._capture_for_cycles(cycles)[:count]
+
+    def capture_blocks(self, count: int, *, timeout: Optional[float] = None):
+        del timeout
+        try:
+            from .capture_audio import AudioBlock
+        except ImportError:
+            from capture_audio import AudioBlock  # type: ignore
+        samples = self._capture_for_cycles(max(1, count) * 4096 * 1600)
+        if count <= 0:
+            return []
+        block_size = max(1, (len(samples) + count - 1) // count)
+        return [AudioBlock({"type": 1, "frame_count": len(samples[i:i + block_size])}, samples[i:i + block_size])
+                for i in range(0, len(samples), block_size)][:count]
+
+    def get_latest_samples(self, count: int) -> list[tuple[int, int]]:
+        return self.latest_samples[-count:]
+
+
+class SimDebugLinkDevice:
+    """Picorom-like transport backed by simulator debug_link.* methods."""
+
+    def __init__(
+        self,
+        sim: SimServerClient,
+        *,
+        comms_addr: int = 0x1F800,
+        timeout_cycles_per_byte: int = 2_000_000,
+        read_timeout_cycles: int = 2_000_000,
+    ):
+        self.sim = sim
+        self.comms_addr = comms_addr
+        self.timeout_cycles_per_byte = timeout_cycles_per_byte
+        self.read_timeout_cycles = read_timeout_cycles
+        self._closed = False
+        self.sim.call("debug_link.start", {"comms_addr": comms_addr})
+
+    def write(self, data: bytes | bytearray) -> None:
+        self.sim.call(
+            "debug_link.write",
+            {"data_hex": bytes(data).hex(), "timeout_cycles_per_byte": self.timeout_cycles_per_byte},
+        )
+
+    def read_exact(self, n: int) -> bytes:
+        rsp = self.sim.call(
+            "debug_link.read",
+            {"max_bytes": n, "min_bytes": n, "timeout_cycles": self.read_timeout_cycles},
+        )
+        data = bytes.fromhex(rsp.get("data_hex", ""))
+        return data if len(data) == n else b""
+
+    def open_audio(self, *, latest_capacity: int = 65536) -> SimAudioCaptureReader:
+        del latest_capacity
+        return SimAudioCaptureReader(self.sim)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self.sim.call("debug_link.stop")
+        finally:
+            self.sim.close()
+
+
+class SimICS2115Remote:
+    """ICS2115Remote-compatible API using native simulator server methods.
+
+    This intentionally avoids the TestROM/debug-link byte transport by default:
+    the simulator is much slower than the real board, so native cycle-based
+    commands are far faster and deterministic.  Audio capture still uses the
+    simulator packet stream.
+    """
+
+    def __init__(self, sim: SimServerClient):
+        self.sim = sim
+        self.audio = None
+
+    def close(self) -> None:
+        if self.audio is not None:
+            self.audio.close()
+            self.audio = None
+        self.sim.close()
+
+    def __enter__(self) -> "SimICS2115Remote":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        del exc_type, exc, tb
+        self.close()
+
+    def _state(self) -> dict[str, Any]:
+        return self.sim.call("ics2115.get_state")
+
+    @staticmethod
+    def _voice_from_state(v: dict[str, Any]) -> Voice:
+        def split_addr(addr: int) -> tuple[int, int]:
+            return (addr >> 13) & 0xFFFF, (addr >> 5) & 0xFF
+        def split_acc(addr: int) -> tuple[int, int]:
+            return (addr >> 13) & 0xFFFF, ((addr & 0x1FFF) << 3) & 0xFFFF
+        start_hi, start_lo = split_addr(int(v.get("osc_start", 0)))
+        end_hi, end_lo = split_addr(int(v.get("osc_end", 0)))
+        acc_hi, acc_lo = split_acc(int(v.get("osc_acc", 0)))
+        return Voice(
+            osc_conf=int(v.get("osc_conf", 0)) & 0xFF,
+            osc_fc=int(v.get("osc_fc", 0)) & 0xFFFF,
+            osc_start_hi=start_hi,
+            osc_start_lo=start_lo,
+            osc_end_hi=end_hi,
+            osc_end_lo=end_lo,
+            vol_incr=int(v.get("vol_incr", 0)) & 0xFF,
+            vol_start=(int(v.get("vol_start", 0)) >> 18) & 0xFF,
+            vol_end=(int(v.get("vol_end", 0)) >> 18) & 0xFF,
+            vol_acc=(int(v.get("vol_acc", 0)) >> 10) & 0xFFFF,
+            osc_acc_hi=acc_hi,
+            osc_acc_lo=acc_lo,
+            pan=int(v.get("vol_pan", 0)) & 0xFF,
+            vol_ctrl=int(v.get("vol_ctrl", 0)) & 0xFF,
+            osc_ctl=int(v.get("osc_ctl", 0)) & 0xFF,
+            osc_saddr=int(v.get("osc_saddr", 0)) & 0xFF,
+            vmode=int(v.get("vol_mode", 0)) & 0xFF,
+        )
+
+    @staticmethod
+    def _voice_to_state(index: int, value: Voice) -> dict[str, Any]:
+        osc_conf = value.osc_conf & 0xFF
+        state_on = value.osc_ctl == 0x00
+        if state_on:
+            osc_conf &= ~0x04
+        elif value.osc_ctl == 0x0F:
+            osc_conf |= 0x04
+        return {
+            "index": index & 0x1F,
+            "osc_acc": value.acc_internal_addr & 0x1FFFFFFF,
+            "osc_fc": value.osc_fc & 0xFFFE,
+            "osc_start": value.start_internal_addr & 0x1FFFFFFF,
+            "osc_end": value.end_internal_addr & 0x1FFFFFFF,
+            "osc_saddr": value.osc_saddr & 0xFF,
+            "osc_conf": osc_conf,
+            "osc_ctl": value.osc_ctl & 0xFF,
+            "vol_acc": (value.vol_acc & 0xFFFF) << 10,
+            "vol_start": (value.vol_start & 0xFF) << 18,
+            "vol_end": (value.vol_end & 0xFF) << 18,
+            "vol_incr": value.vol_incr & 0xFF,
+            "vol_pan": value.pan & 0xFF,
+            "vol_ctrl": value.vol_ctrl & 0xFF,
+            "vol_mode": value.vmode & 0xFF,
+            "state_on": state_on,
+        }
+
+    def ping(self) -> PingInfo:
+        return PingInfo(driver_magic=0x1C51, z80_status=0, z80_error=0, z80_seq=0)
+
+    def init(self) -> PingInfo:
+        # Simulator-native mode does not need the Z80 host-driver init path.
+        return self.ping()
+
+    def read_voice(self, voice: int) -> Voice:
+        voices = self._state().get("voices", [])
+        return self._voice_from_state(voices[voice & 0x1F])
+
+    def write_voice(self, voice: int, value: Voice | dict[str, Any]) -> None:
+        if isinstance(value, dict):
+            value = Voice(**value)
+        self.sim.call("ics2115.write_voice", self._voice_to_state(voice, value))
+
+    def play_voice(self, voice: int, value: Optional[Voice] = None) -> None:
+        if value is None:
+            value = Voice.from_bios_trace()
+        value.osc_ctl = 0x00
+        self.write_voice(voice, value)
+
+    def stop_voice(self, voice: int) -> None:
+        v = self.read_voice(voice)
+        v.osc_ctl = 0x0F
+        self.write_voice(voice, v)
+
+    def read_reg(self, voice: int, reg: str | int, width: Optional[int] = None) -> int:
+        del width
+        v = self.read_voice(voice)
+        definition = ICS2115Remote._resolve_reg(reg, VOICE_REGISTERS)
+        return int(getattr(v, definition.canonical))
+
+    def write_reg(self, voice: int, reg: str | int, value: int, width: Optional[int] = None) -> None:
+        del width
+        v = self.read_voice(voice)
+        definition = ICS2115Remote._resolve_reg(reg, VOICE_REGISTERS)
+        setattr(v, definition.canonical, value)
+        self.write_voice(voice, v)
+
+    def read_global(self, reg: str | int, width: Optional[int] = None) -> int:
+        del width
+        definition = ICS2115Remote._resolve_reg(reg, GLOBAL_REGISTERS)
+        state = self._state()
+        mapping = {
+            "active_osc": "active_osc",
+            "osc_select": "osc_select",
+            "irq_enable": "irq_enabled",
+        }
+        return int(state.get(mapping.get(definition.canonical, definition.canonical), 0))
+
+    def write_global(self, reg: str | int, value: int, width: Optional[int] = None) -> None:
+        del width
+        definition = ICS2115Remote._resolve_reg(reg, GLOBAL_REGISTERS)
+        mapping = {"irq_enable": "irq_enabled"}
+        self.sim.call("ics2115.write_global", {"name": mapping.get(definition.canonical, definition.canonical), "value": value & 0xFFFF})
+
+    def get_irq_counts(self) -> IRQCounts:
+        return IRQCounts(0, 0, 0, 0, 0)
+
+    def reset_irq_counts(self) -> IRQCounts:
+        return IRQCounts(0, 0, 0, 0, 0)
+
+    def open_audio(self, port: Optional[str] = None, *, latest_capacity: int = 65536):
+        del port, latest_capacity
+        self.audio = SimAudioCaptureReader(self.sim)
+        return self.audio
+
+    def latest_audio_samples(self, count: int, *, blocks: Optional[int] = None, timeout: Optional[float] = 1.0) -> list[tuple[int, int]]:
+        if self.audio is None:
+            raise RuntimeError("audio reader is not open; call open_audio() first")
+        if blocks is not None:
+            captured = []
+            for block in self.audio.capture_blocks(blocks, timeout=timeout):
+                captured.extend(block.samples)
+            return captured[-count:]
+        return self.audio.capture_frames(count, timeout=timeout)
+
+    def capture_audio_frames(self, count: int, *, timeout: Optional[float] = 1.0) -> list[tuple[int, int]]:
+        if self.audio is None:
+            raise RuntimeError("audio reader is not open; call open_audio() first")
+        return self.audio.capture_frames(count, timeout=timeout)
+
+
 class ICS2115Remote:
     def __init__(self, picorom, *, timeout: Optional[float] = None):
         self.picorom = picorom
@@ -297,6 +678,51 @@ class ICS2115Remote:
             p.set_parameter("reset", "z")
         p.start_comms(comms_addr)
         return cls(p, timeout=timeout)
+
+    @classmethod
+    def open_sim(
+        cls,
+        *,
+        executable: str | Path = "./sim",
+        cwd: str | Path = "sim",
+        game: Optional[str] = "pgm_test",
+        mra: Optional[str | Path] = None,
+        reset_cycles: Optional[int] = 100,
+        comms_addr: int = 0x1F800,
+        timeout: Optional[float] = None,
+        timeout_cycles_per_byte: int = 2_000_000,
+        read_timeout_cycles: int = 2_000_000,
+        transport: str = "native",
+    ) -> "ICS2115Remote | SimICS2115Remote":
+        """Start sim/sim --server and expose the same remote API.
+
+        By default this uses native simulator ICS2115 methods, not debug-link,
+        because the simulator is much slower than hardware.  Pass
+        transport="debug_link" to exercise the TestROM/debug-link path.
+        """
+        sim = SimServerClient.start(executable, cwd=cwd)
+        try:
+            sim.call("sim.initialize", {"headless": True})
+            if mra is not None:
+                sim.call("sim.load_mra", {"path": str(mra)})
+            elif game is not None:
+                sim.call("sim.load_game", {"name": game})
+            if transport == "debug_link":
+                dev = SimDebugLinkDevice(
+                    sim,
+                    comms_addr=comms_addr,
+                    timeout_cycles_per_byte=timeout_cycles_per_byte,
+                    read_timeout_cycles=read_timeout_cycles,
+                )
+                if reset_cycles is not None:
+                    sim.call("sim.reset", {"cycles": reset_cycles})
+                return cls(dev, timeout=timeout)
+            if reset_cycles is not None:
+                sim.call("sim.reset", {"cycles": reset_cycles})
+            return SimICS2115Remote(sim)
+        except Exception:
+            sim.close()
+            raise
 
     def close(self) -> None:
         if self.audio is not None:
@@ -417,6 +843,11 @@ class ICS2115Remote:
         return IRQCounts(*struct.unpack(">IIIII", payload))
 
     def open_audio(self, port: Optional[str] = None, *, latest_capacity: int = 65536):
+        open_sim_audio = getattr(self.picorom, "open_audio", None)
+        if open_sim_audio is not None:
+            self.audio = open_sim_audio(latest_capacity=latest_capacity)
+            return self.audio
+
         try:
             from .capture_audio import AudioStreamReader
         except ImportError:
@@ -446,6 +877,9 @@ __all__ = [
     "ICSRemoteError",
     "ICSRemoteProtocolError",
     "ICSRemoteCommandError",
+    "SimServerError",
+    "SimServerClient",
+    "SimICS2115Remote",
     "Voice",
     "PingInfo",
     "IRQCounts",

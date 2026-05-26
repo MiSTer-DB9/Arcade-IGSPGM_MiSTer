@@ -138,7 +138,7 @@ module ics2115
         voice_state_t v;
         v = voice_state_t'(voice);
         pack_voice_legacy = '0;
-        pack_voice_legacy[7]       = v.state_on;
+        pack_voice_legacy[7]       = 0;
         pack_voice_legacy[15:8]    = v.vol_mode;
         pack_voice_legacy[23:16]   = v.vol_ctrl;
         pack_voice_legacy[31:24]   = v.vol_pan;
@@ -158,7 +158,6 @@ module ics2115
     function automatic voice_state_t unpack_voice_legacy(input logic [255:0] legacy);
         voice_state_t v;
         v = '0;
-        v.state_on  = legacy[7];
         v.vol_mode  = legacy[15:8];
         v.vol_ctrl  = legacy[23:16];
         v.vol_pan   = legacy[31:24];
@@ -588,13 +587,9 @@ module ics2115
 
         if (reg_select < 8'h20) begin
             case (reg_select[4:0])
-                // 0x00: Oscillator Configuration — osc_conf with state_on merged into bit 3
+                // 0x00: Oscillator Configuration 
                 5'h00: begin
-                    reg_read_data = {
-                        (reg_read_voice.osc_conf & ~8'h08) |
-                        (reg_read_voice.state_on ? 8'h08 : 8'h00),
-                        8'h00
-                    };
+                    reg_read_data = { reg_read_voice.osc_conf, 8'h00 };
                 end
 
                 // 0x01: Wavesample frequency (16-bit, no shift)
@@ -666,7 +661,7 @@ module ics2115
                 end
 
                 // 0x10: Oscillator Control — osc_ctl in high byte
-                5'h10: reg_read_data = {reg_read_voice.osc_ctl, 8'h00};
+                5'h10: reg_read_data = {6'b111111, reg_read_voice.osc_ctl[1:0], 8'h00};
 
                 // 0x11: Wavesample static address — saddr in high byte
                 5'h11: reg_read_data = {reg_read_voice.osc_saddr, 8'h00};
@@ -796,14 +791,6 @@ module ics2115
                 5'h0D: result.vol_ctrl[6:0]    = data[6:0];
                 5'h10: begin
                     result.osc_ctl = data[7:0];
-                    if (data[7:0] == 8'h00) begin
-                        result.state_on = 1'b1;
-                        result.osc_conf[OSC_STOP] = 1'b0;
-                    end else if (data[7:0] == 8'h0F) begin
-                        result.state_on = 1'b0;
-                        result.osc_conf[OSC_STOP] = 1'b1;
-                        result.vol_ctrl[VOL_STOP] = 1'b1;
-                    end
                 end
                 5'h11: result.osc_saddr = data[7:0];
                 default: ;

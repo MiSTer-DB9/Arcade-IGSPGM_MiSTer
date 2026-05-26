@@ -182,10 +182,10 @@ static void ics_write_active_osc(void)
 static u8 ics_reg_uses_voice_select(u8 reg)
 {
     /* Match the BIOS/MAME split: most regs < 0x20 are oscillator/voice
-       registers, but 0x0e is Active Oscillators, 0x0f is IRQV, and 0x12 is a
-       global mode register.  The BIOS writes 0x0e directly with no preceding
-       0x4f oscillator select. */
-    return reg < 0x20 && reg != 0x0e && reg != 0x0f && reg != 0x12;
+       registers, but 0x0e is Active Oscillators and 0x0f is IRQV.  VMode
+       register 0x12 is per-voice and uses the upper data port, so it still
+       needs a preceding 0x4f oscillator select. */
+    return reg < 0x20 && reg != 0x0e && reg != 0x0f;
 }
 
 static u16 ics_read_reg(u8 voice, u8 reg, u8 width)
@@ -283,9 +283,9 @@ static void ics_read_voice(u8 voice)
     voice_put8(&off, (u8)ics_read_reg(voice, 0x03, Z80_ICS_WIDTH_UPPER8));
     voice_put16(&off, ics_read_reg(voice, 0x04, Z80_ICS_WIDTH_16));
     voice_put8(&off, (u8)ics_read_reg(voice, 0x05, Z80_ICS_WIDTH_UPPER8));
-    voice_put8(&off, (u8)ics_read_reg(voice, 0x06, Z80_ICS_WIDTH_LOWER8));
-    voice_put8(&off, (u8)ics_read_reg(voice, 0x07, Z80_ICS_WIDTH_LOWER8));
-    voice_put8(&off, (u8)ics_read_reg(voice, 0x08, Z80_ICS_WIDTH_LOWER8));
+    voice_put8(&off, (u8)ics_read_reg(voice, 0x06, Z80_ICS_WIDTH_UPPER8));
+    voice_put8(&off, (u8)ics_read_reg(voice, 0x07, Z80_ICS_WIDTH_UPPER8));
+    voice_put8(&off, (u8)ics_read_reg(voice, 0x08, Z80_ICS_WIDTH_UPPER8));
     voice_put16(&off, ics_read_reg(voice, 0x09, Z80_ICS_WIDTH_16));
     voice_put16(&off, ics_read_reg(voice, 0x0a, Z80_ICS_WIDTH_16));
     voice_put16(&off, ics_read_reg(voice, 0x0b, Z80_ICS_WIDTH_16));
@@ -293,6 +293,8 @@ static void ics_read_voice(u8 voice)
     voice_put8(&off, (u8)ics_read_reg(voice, 0x0d, Z80_ICS_WIDTH_UPPER8));
     voice_put8(&off, (u8)ics_read_reg(voice, 0x10, Z80_ICS_WIDTH_UPPER8));
     voice_put8(&off, (u8)ics_read_reg(voice, 0x11, Z80_ICS_WIDTH_UPPER8));
+    voice_put8(&off, (u8)ics_read_reg(voice, 0x12, Z80_ICS_WIDTH_UPPER8));
+    voice_put8(&off, 0);
 }
 
 static void ics_write_voice(u8 voice)
@@ -314,6 +316,8 @@ static void ics_write_voice(u8 voice)
     u8 vol_ctrl = voice_get8(&off);
     u8 osc_ctl = voice_get8(&off);
     u8 osc_saddr = voice_get8(&off);
+    u8 vmode = voice_get8(&off);
+    (void)voice_get8(&off);
 
     /* Hardware-parity PLAY path: select voice once, then emit the same register
        order observed from z80_sound_test / BIOS ProgramSoundChannelRegisters.
@@ -322,6 +326,7 @@ static void ics_write_voice(u8 voice)
     ics_write_selected_reg(0x10, Z80_ICS_WIDTH_UPPER8, 0x0f);
     ics_write_selected_reg(0x01, Z80_ICS_WIDTH_16, osc_fc);
     ics_write_selected_reg(0x11, Z80_ICS_WIDTH_UPPER8, osc_saddr);
+    ics_write_selected_reg(0x12, Z80_ICS_WIDTH_UPPER8, vmode);
     ics_write_selected_reg(0x0b, Z80_ICS_WIDTH_16, osc_acc_lo);
     ics_write_selected_reg(0x0a, Z80_ICS_WIDTH_16, osc_acc_hi);
     ics_write_selected_reg(0x03, Z80_ICS_WIDTH_UPPER8, osc_start_lo);
@@ -329,8 +334,9 @@ static void ics_write_voice(u8 voice)
     ics_write_selected_reg(0x05, Z80_ICS_WIDTH_UPPER8, osc_end_lo);
     ics_write_selected_reg(0x04, Z80_ICS_WIDTH_16, osc_end_hi);
     ics_write_selected_reg(0x0c, Z80_ICS_WIDTH_UPPER8, pan);
-    ics_write_selected_reg(0x07, Z80_ICS_WIDTH_LOWER8, vol_start);
-    ics_write_selected_reg(0x08, Z80_ICS_WIDTH_LOWER8, vol_end);
+    ics_write_selected_reg(0x06, Z80_ICS_WIDTH_UPPER8, vol_incr);
+    ics_write_selected_reg(0x07, Z80_ICS_WIDTH_UPPER8, vol_start);
+    ics_write_selected_reg(0x08, Z80_ICS_WIDTH_UPPER8, vol_end);
     ics_write_selected_reg(0x09, Z80_ICS_WIDTH_16, vol_acc);
     ics_write_selected_reg(0x00, Z80_ICS_WIDTH_UPPER8, osc_conf);
     ics_write_selected_reg(0x0d, Z80_ICS_WIDTH_UPPER8, vol_ctrl);

@@ -7,6 +7,7 @@
 
 #define CAPTURE_STREAM_PACKET_QUEUE_LEN 32u
 #define CAPTURE_STREAM_MAX_AUDIO_FRAMES 128u
+#define CAPTURE_STREAM_MAX_ARMED_BLOCKS 65535u
 #define CAPTURE_STREAM_MAX_PAYLOAD_BYTES (CAPTURE_STREAM_MAX_AUDIO_FRAMES * sizeof(stereo_frame_t))
 #define CAPTURE_STREAM_MAX_PACKET_BYTES (sizeof(pgm_capture_packet_header_t) + CAPTURE_STREAM_MAX_PAYLOAD_BYTES)
 #define CAPTURE_STREAM_COMMAND_BYTES 16u
@@ -180,9 +181,9 @@ static void process_command(const capture_stream_command_t *cmd) {
             armed_skip_blocks = CAPTURE_STREAM_TRIGGER_SKIP_BLOCKS;
             break;
         case PGM_CAPTURE_CONTROL_CMD_ARM_BLOCKS:
-            if (cmd->arg == 0 || cmd->arg > CAPTURE_STREAM_PACKET_QUEUE_LEN) {
+            if (cmd->arg == 0 || cmd->arg > CAPTURE_STREAM_MAX_ARMED_BLOCKS) {
                 status = PGM_CAPTURE_CONTROL_STATUS_BAD_ARG;
-                value = CAPTURE_STREAM_PACKET_QUEUE_LEN;
+                value = CAPTURE_STREAM_MAX_ARMED_BLOCKS;
                 break;
             }
             clear_queue();

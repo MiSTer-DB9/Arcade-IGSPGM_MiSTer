@@ -76,6 +76,19 @@ uint64_t GetWideBits(const VlWide<8> &wide, int lsb, int width)
     return value;
 }
 
+void SetWideBits(VlWide<8> &wide, int lsb, int width, uint64_t value)
+{
+    for (int bit = 0; bit < width; bit++)
+    {
+        const int absoluteBit = lsb + bit;
+        const uint32_t mask = uint32_t{1} << (absoluteBit % 32);
+        if ((value >> bit) & 1u)
+            wide[absoluteBit / 32] |= mask;
+        else
+            wide[absoluteBit / 32] &= ~mask;
+    }
+}
+
 void CollectVpiSignalsRecursive(vpiHandle moduleHandle, std::vector<SignalInfo> &signals, std::set<std::string> &seen)
 {
     if (moduleHandle == nullptr)
@@ -431,6 +444,45 @@ ControllerResult<std::vector<std::string>> SimController::ListRegions() const
 {
     return ControllerResult<std::vector<std::string>>::Success(
         {"BIOS_ROM", "PROGRAM_ROM", "PALETTE_RAM", "VIDEO_RAM", "WORK_RAM", "AUDIO_RAM", "TILE_ROM", "MUSIC_ROM", "B_ROM", "A_ROM"});
+}
+
+ControllerResult<EmptyResult> SimController::DebugLinkStart(uint32_t commsWordAddr)
+{
+    auto initResult = EnsureInitialized();
+    if (!initResult.ok)
+        return initResult;
+    gSimCore.DebugLinkStart(commsWordAddr);
+    return ControllerResult<EmptyResult>::Success({});
+}
+
+ControllerResult<EmptyResult> SimController::DebugLinkStop()
+{
+    auto initResult = EnsureInitialized();
+    if (!initResult.ok)
+        return initResult;
+    gSimCore.DebugLinkStop();
+    return ControllerResult<EmptyResult>::Success({});
+}
+
+ControllerResult<EmptyResult> SimController::DebugLinkWrite(const std::vector<uint8_t> &data, uint64_t timeoutCyclesPerByte)
+{
+    auto initResult = EnsureInitialized();
+    if (!initResult.ok)
+        return initResult;
+    if (!gSimCore.DebugLinkWrite(data, timeoutCyclesPerByte))
+        return ControllerResult<EmptyResult>::Failure("debug_link_timeout", "Timed out writing debug-link data");
+    return ControllerResult<EmptyResult>::Success({});
+}
+
+ControllerResult<DebugLinkReadResult> SimController::DebugLinkRead(uint32_t maxBytes, uint32_t minBytes, uint64_t timeoutCycles)
+{
+    auto initResult = EnsureInitialized();
+    if (!initResult.ok)
+        return ControllerResult<DebugLinkReadResult>::Failure(initResult.errorCode, initResult.errorMessage);
+    DebugLinkReadResult result;
+    result.mData = gSimCore.DebugLinkRead(maxBytes, minBytes, timeoutCycles);
+    result.mAvailable = static_cast<uint32_t>(result.mData.size());
+    return ControllerResult<DebugLinkReadResult>::Success(result);
 }
 
 ControllerResult<SignalReadResult> SimController::ReadSignal(const std::string &signal) const
@@ -837,6 +889,68 @@ ControllerResult<Ics2115DebugState> SimController::GetIcs2115DebugState() const
     }
 
     return ControllerResult<Ics2115DebugState>::Success(result);
+}
+
+ControllerResult<EmptyResult> SimController::SetIcs2115VoiceState(uint32_t index, const Ics2115VoiceState &voice)
+{
+    auto initResult = EnsureInitialized();
+    if (!initResult.ok)
+        return initResult;
+    if (index >= 32)
+        return ControllerResult<EmptyResult>::Failure("bad_request", "voice index must be 0..31");
+
+    auto *root = gSimCore.mTop->rootp;
+    uint64_t waited = 0;
+    while (root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__seq_state != 0)
+    {
+        if (waited++ >= 200000)
+            return ControllerResult<EmptyResult>::Failure("ics2115_busy", "Timed out waiting for ICS2115 sequencer idle");
+        TickResult tickResult = gSimCore.Tick(1);
+        if (!tickResult.Succeeded())
+            return ControllerResult<EmptyResult>::Failure("run_failed", "Simulator stopped while waiting for ICS2115 sequencer idle");
+    }
+
+    auto &wide = root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__voice_ram__DOT__ram[index];
+    for (int i = 0; i < 8; i++)
+        wide[i] = 0;
+    SetWideBits(wide, 0, 1, voice.mStateOn ? 1 : 0);
+    SetWideBits(wide, 1, 8, voice.mVolMode);
+    SetWideBits(wide, 9, 8, voice.mVolCtrl);
+    SetWideBits(wide, 17, 8, voice.mVolPan);
+    SetWideBits(wide, 25, 8, voice.mVolIncr);
+    SetWideBits(wide, 33, 26, voice.mVolEnd);
+    SetWideBits(wide, 59, 26, voice.mVolStart);
+    SetWideBits(wide, 85, 26, voice.mVolAcc);
+    SetWideBits(wide, 111, 8, voice.mOscCtl);
+    SetWideBits(wide, 119, 8, voice.mOscConf);
+    SetWideBits(wide, 127, 8, voice.mOscSaddr);
+    SetWideBits(wide, 135, 29, voice.mOscEnd);
+    SetWideBits(wide, 164, 29, voice.mOscStart);
+    SetWideBits(wide, 193, 16, voice.mOscFc);
+    SetWideBits(wide, 209, 29, voice.mOscAcc);
+    return ControllerResult<EmptyResult>::Success({});
+}
+
+ControllerResult<EmptyResult> SimController::SetIcs2115GlobalRegister(const std::string &name, uint32_t value)
+{
+    auto initResult = EnsureInitialized();
+    if (!initResult.ok)
+        return initResult;
+
+    auto *root = gSimCore.mTop->rootp;
+    if (name == "active_osc")
+        root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__active_osc = value & 0x1f;
+    else if (name == "osc_select")
+        root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__osc_select = value & 0x1f;
+    else if (name == "reg_select")
+        root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__reg_select = value & 0xff;
+    else if (name == "mode" || name == "vmode")
+        root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__vmode = value & 0xff;
+    else if (name == "irq_enable" || name == "irq_enabled")
+        root->sim_top__DOT__pgm_inst__DOT__ics2115__DOT__irq_enabled = value & 0xff;
+    else
+        return ControllerResult<EmptyResult>::Failure("bad_request", "unsupported ICS2115 global register: " + name);
+    return ControllerResult<EmptyResult>::Success({});
 }
 
 ControllerResult<GuiOverrideResult> SimController::SetGuiOverrideByIndex(uint32_t index, uint16_t value, bool pulse)

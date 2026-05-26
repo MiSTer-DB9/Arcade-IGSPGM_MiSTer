@@ -6,6 +6,7 @@
 #include <memory>
 #include <vector>
 #include <cstdint>
+#include <deque>
 
 #include "games.h"
 #include "sim_memory.h"
@@ -107,6 +108,13 @@ class SimCore
     void StopAudioCapture();
     bool IsAudioCaptureActive() const;
 
+    // PicoROM/debug-link emulator for simulator-side TestROM control.
+    void DebugLinkStart(uint32_t commsWordAddr = 0x1F800);
+    void DebugLinkStop();
+    bool DebugLinkEnabled() const;
+    bool DebugLinkWrite(const std::vector<uint8_t> &data, uint64_t timeoutCyclesPerByte = 2000000);
+    std::vector<uint8_t> DebugLinkRead(uint32_t maxBytes, uint32_t minBytes = 0, uint64_t timeoutCycles = 2000000);
+
     // IOCTL methods
     bool SendIOCTLData(uint8_t index, const std::vector<uint8_t> &data);
     bool SendIOCTLDataDDR(uint8_t index, uint32_t addr, const std::vector<uint8_t> &data);
@@ -134,7 +142,21 @@ class SimCore
 
     std::unique_ptr<MemoryInterface> mMemoryRegion[(int)MemoryRegion::COUNT];
 
+    bool mDebugLinkEnabled = false;
+    uint32_t mDebugLinkBaseByte = 0;
+    uint8_t mDebugLinkInSeq = 0;
+    uint8_t mDebugLinkOutSeq = 0;
+    bool mDebugLinkPrevInByteRead = false;
+    bool mDebugLinkPrevOutRead = false;
+    bool mDebugLinkInByteReadPulse = false;
+    bool mDebugLinkTxOutstanding = false;
+    std::deque<uint8_t> mDebugLinkTx;
+    std::deque<uint8_t> mDebugLinkRx;
+
     TickResult TickOneCycle();
+    void DebugLinkTick();
+    void DebugLinkPrimeTx();
+    void DebugLinkWriteByte(uint32_t offset, uint8_t value);
 
     // IOCTL helper methods
     void WaitForIOCTLReady();

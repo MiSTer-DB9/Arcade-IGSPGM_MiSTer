@@ -912,6 +912,58 @@ std::string SimProtocol::HandleLine(const std::string &line)
         auto result = mController.GetIcs2115DebugState();
         return SerializeJson(WrapControllerResult(id, result, Ics2115StateToJson(result.value)));
     }
+    if (method == "ics2115.write_voice")
+    {
+        uint64_t index = 0;
+        Ics2115VoiceState voice;
+        if (!RequireObjectField(params, "index", field, error) || !RequireNumber(*field, "index", index, error))
+            return SerializeJson(MakeErrorResponse(id, "bad_request", error));
+        voice.mIndex = static_cast<uint32_t>(index);
+        const auto readNum = [&](const char *name, uint64_t &out) -> bool {
+            const JsonValue *value = FindObjectField(params, name);
+            if (!value)
+            {
+                error = std::string("Missing field: ") + name;
+                return false;
+            }
+            return RequireNumber(*value, name, out, error);
+        };
+        uint64_t tmp = 0;
+        if (!readNum("osc_acc", tmp)) return SerializeJson(MakeErrorResponse(id, "bad_request", error)); voice.mOscAcc = tmp;
+        if (!readNum("osc_fc", tmp)) return SerializeJson(MakeErrorResponse(id, "bad_request", error)); voice.mOscFc = tmp;
+        if (!readNum("osc_start", tmp)) return SerializeJson(MakeErrorResponse(id, "bad_request", error)); voice.mOscStart = tmp;
+        if (!readNum("osc_end", tmp)) return SerializeJson(MakeErrorResponse(id, "bad_request", error)); voice.mOscEnd = tmp;
+        if (!readNum("osc_saddr", tmp)) return SerializeJson(MakeErrorResponse(id, "bad_request", error)); voice.mOscSaddr = tmp;
+        if (!readNum("osc_conf", tmp)) return SerializeJson(MakeErrorResponse(id, "bad_request", error)); voice.mOscConf = tmp;
+        if (!readNum("osc_ctl", tmp)) return SerializeJson(MakeErrorResponse(id, "bad_request", error)); voice.mOscCtl = tmp;
+        if (!readNum("vol_acc", tmp)) return SerializeJson(MakeErrorResponse(id, "bad_request", error)); voice.mVolAcc = tmp;
+        if (!readNum("vol_start", tmp)) return SerializeJson(MakeErrorResponse(id, "bad_request", error)); voice.mVolStart = tmp;
+        if (!readNum("vol_end", tmp)) return SerializeJson(MakeErrorResponse(id, "bad_request", error)); voice.mVolEnd = tmp;
+        if (!readNum("vol_incr", tmp)) return SerializeJson(MakeErrorResponse(id, "bad_request", error)); voice.mVolIncr = tmp;
+        if (!readNum("vol_pan", tmp)) return SerializeJson(MakeErrorResponse(id, "bad_request", error)); voice.mVolPan = tmp;
+        if (!readNum("vol_ctrl", tmp)) return SerializeJson(MakeErrorResponse(id, "bad_request", error)); voice.mVolCtrl = tmp;
+        if (!readNum("vol_mode", tmp)) return SerializeJson(MakeErrorResponse(id, "bad_request", error)); voice.mVolMode = tmp;
+        const JsonValue *stateOnField = FindObjectField(params, "state_on");
+        bool stateOn = false;
+        if (stateOnField)
+        {
+            if (!RequireBool(*stateOnField, "state_on", stateOn, error))
+                return SerializeJson(MakeErrorResponse(id, "bad_request", error));
+            voice.mStateOn = stateOn;
+        }
+        auto result = mController.SetIcs2115VoiceState(static_cast<uint32_t>(index), voice);
+        return SerializeJson(WrapControllerResult(id, result, JsonValue::Object({})));
+    }
+    if (method == "ics2115.write_global")
+    {
+        std::string name;
+        uint64_t value = 0;
+        if (!RequireObjectField(params, "name", field, error) || !RequireString(*field, "name", name, error)
+            || !RequireObjectField(params, "value", field, error) || !RequireNumber(*field, "value", value, error))
+            return SerializeJson(MakeErrorResponse(id, "bad_request", error));
+        auto result = mController.SetIcs2115GlobalRegister(name, static_cast<uint32_t>(value));
+        return SerializeJson(WrapControllerResult(id, result, JsonValue::Object({})));
+    }
     if (method == "memory.read")
     {
         std::string region;
@@ -951,6 +1003,63 @@ std::string SimProtocol::HandleLine(const std::string &line)
         for (const auto &region : result.value)
             regions.push_back(JsonValue::String(region));
         return SerializeJson(WrapControllerResult(id, result, JsonValue::Array(std::move(regions))));
+    }
+    if (method == "debug_link.start")
+    {
+        uint64_t commsAddr = 0x1F800;
+        if (const JsonValue *addrField = FindObjectField(params, "comms_addr"))
+        {
+            if (!RequireNumber(*addrField, "comms_addr", commsAddr, error))
+                return SerializeJson(MakeErrorResponse(id, "bad_request", error));
+        }
+        auto result = mController.DebugLinkStart(static_cast<uint32_t>(commsAddr));
+        return SerializeJson(WrapControllerResult(id, result, JsonValue::Object({})));
+    }
+    if (method == "debug_link.stop")
+    {
+        auto result = mController.DebugLinkStop();
+        return SerializeJson(WrapControllerResult(id, result, JsonValue::Object({})));
+    }
+    if (method == "debug_link.write")
+    {
+        std::string dataHex;
+        uint64_t timeoutCycles = 2000000;
+        if (!RequireObjectField(params, "data_hex", field, error) || !RequireString(*field, "data_hex", dataHex, error))
+            return SerializeJson(MakeErrorResponse(id, "bad_request", error));
+        if (const JsonValue *timeoutField = FindObjectField(params, "timeout_cycles_per_byte"))
+        {
+            if (!RequireNumber(*timeoutField, "timeout_cycles_per_byte", timeoutCycles, error))
+                return SerializeJson(MakeErrorResponse(id, "bad_request", error));
+        }
+        std::vector<uint8_t> data;
+        if (!HexToBytes(dataHex, data, error))
+            return SerializeJson(MakeErrorResponse(id, "bad_request", error));
+        auto result = mController.DebugLinkWrite(data, timeoutCycles);
+        return SerializeJson(WrapControllerResult(id, result, JsonValue::Object({})));
+    }
+    if (method == "debug_link.read")
+    {
+        uint64_t maxBytes = 0;
+        uint64_t minBytes = 0;
+        uint64_t timeoutCycles = 2000000;
+        if (!RequireObjectField(params, "max_bytes", field, error) || !RequireNumber(*field, "max_bytes", maxBytes, error))
+            return SerializeJson(MakeErrorResponse(id, "bad_request", error));
+        if (const JsonValue *minField = FindObjectField(params, "min_bytes"))
+        {
+            if (!RequireNumber(*minField, "min_bytes", minBytes, error))
+                return SerializeJson(MakeErrorResponse(id, "bad_request", error));
+        }
+        if (const JsonValue *timeoutField = FindObjectField(params, "timeout_cycles"))
+        {
+            if (!RequireNumber(*timeoutField, "timeout_cycles", timeoutCycles, error))
+                return SerializeJson(MakeErrorResponse(id, "bad_request", error));
+        }
+        auto result = mController.DebugLinkRead(static_cast<uint32_t>(maxBytes), static_cast<uint32_t>(minBytes), timeoutCycles);
+        JsonValue payload = JsonValue::Object({
+            {"data_hex", JsonValue::String(BytesToHex(result.value.mData))},
+            {"available", JsonValue::Number(result.value.mAvailable)},
+        });
+        return SerializeJson(WrapControllerResult(id, result, payload));
     }
     if (method == "signal.read")
     {

@@ -15,13 +15,17 @@ package ics2115_pkg;
     localparam ULAW_TABLE_SIZE    = 256;
 
     // =========================================================================
+    // OscCtl (register 0x10)
+    localparam OSC_DONE      = 0;
+    localparam OSC_STOP      = 1;
+
+    // =========================================================================
     // OscConf (register 0x00) bit positions — use localparam, not enum
     // Spec §4.3: [7] irq_pending | [6] invert | [5] irq_en | [4] bidir |
     //            [3] loop | [2] 8-bit | [1] stop | [0] µ-law
     // =========================================================================
     localparam OSC_ULAW      = 0;
     localparam OSC_EIGHTBIT  = 1;
-    localparam OSC_STOP      = 2;
     localparam OSC_LOOP      = 3;
     localparam OSC_BIDIR     = 4;
     localparam OSC_IRQ       = 5;

@@ -82,6 +82,8 @@ typedef struct Z80_ICS_PACKED
     u8  vol_ctrl;
     u8  osc_ctl;
     u8  osc_saddr;
+    u8  vmode;
+    u8  reserved;
 } z80_ics_voice_t;
 
 #define Z80_ICS_VOICE_SIZE 24

@@ -120,7 +120,7 @@ Commands:
 - `2` `CONTINUOUS`: clear queue and resume normal continuous streaming.
 - `3` `IDLE`: clear queue and stop queueing audio/status packets.
 - `4` `ARM_FRAMES`: clear queue, discard a small number of internal DMA blocks, then send the next `arg` stereo frames and return to idle.
-- `5` `ARM_BLOCKS`: clear queue, discard a small number of internal DMA blocks, then send the next `arg` audio blocks and return to idle.
+- `5` `ARM_BLOCKS`: clear queue, discard a small number of internal DMA blocks, then send the next `arg` audio blocks and return to idle. `arg` may be up to 65535; this is intentionally larger than the firmware transmit queue, so the host must keep reading to avoid queue-drop flags on long captures.
 - `6` `STATUS`: return current control state in a control ACK.
 
 Continuous streaming remains the power-on/default mode. Triggered commands are intended for low-latency register-sweep tests where stale host/USB buffered audio must be avoided without closing and reopening the serial port.
