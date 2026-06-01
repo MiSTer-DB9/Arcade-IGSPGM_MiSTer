@@ -22,10 +22,10 @@ package ics2115_pkg;
     // =========================================================================
     // OscConf (register 0x00) bit positions — use localparam, not enum
     // Spec §4.3: [7] irq_pending | [6] invert | [5] irq_en | [4] bidir |
-    //            [3] loop | [2] 8-bit | [1] stop | [0] µ-law
+    //            [3] loop | [1] 16-bit | [0] µ-law
     // =========================================================================
     localparam OSC_ULAW      = 0;
-    localparam OSC_EIGHTBIT  = 1;
+    localparam OSC_16BIT     = 1;
     localparam OSC_LOOP      = 3;
     localparam OSC_BIDIR     = 4;
     localparam OSC_IRQ       = 5;

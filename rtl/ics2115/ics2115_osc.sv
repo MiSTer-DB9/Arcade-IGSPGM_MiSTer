@@ -60,7 +60,6 @@ module ics2115_osc
         ST_INTERPOLATE      = 5'd9,
         ST_MIX              = 5'd10,
         ST_OSC_UPDATE       = 5'd11,
-        ST_BOUNDARY_CHECK   = 5'd12,
         ST_VOL_ENV_UPDATE   = 5'd14,    // volume envelope accumulator update
         ST_DONE             = 5'd16
     } osc_state_t;
@@ -92,22 +91,24 @@ module ics2115_osc
     logic osc_conf_8bit;
     logic osc_conf_ulaw;
     logic osc_conf_8bit_linear;
+    logic osc_conf_16bit;
 
     always_comb begin
         osc_conf_8bit = 0;
         osc_conf_ulaw = 0;
         osc_conf_8bit_linear = 0;
+        osc_conf_16bit = 0;
 
-        if (~v.osc_conf[OSC_EIGHTBIT]) begin
+        if (~v.osc_conf[OSC_16BIT]) begin
             osc_conf_8bit = 1;
             if (v.osc_conf[OSC_ULAW])
                 osc_conf_ulaw = 1;
             else
                 osc_conf_8bit_linear = 1;
+        end else begin
+            osc_conf_16bit = 1;
         end
     end
-
-    logic [28:0] osc_save;
 
     function automatic logic [25:0] calc_vol_step(
         input logic [1:0] mode,
@@ -149,27 +150,6 @@ module ics2115_osc
 
     always_comb begin
         vol_step = calc_vol_step(v.vol_mode[1:0], v.vol_incr);
-    end
-
-    // =========================================================================
-    // Combinational signals for boundary/interpolation/mix
-    // =========================================================================
-    // Boundary check: osc_left = distance to boundary (signed)
-    logic signed [29:0] osc_left;
-    always_comb begin
-        if (v.osc_conf[OSC_INVERT])
-            osc_left = $signed({1'b0, v.osc_acc}) - $signed({1'b0, v.osc_start});
-        else
-            osc_left = $signed({1'b0, v.osc_end}) - $signed({1'b0, v.osc_acc});
-    end
-
-    // Next-addr boundary proximity check
-    logic signed [29:0] osc_left_pre;  // pre-update left for next-addr calc
-    always_comb begin
-        if (voice_in.osc_conf[OSC_INVERT])
-            osc_left_pre = $signed({1'b0, voice_in.osc_acc}) - $signed({1'b0, voice_in.osc_start});
-        else
-            osc_left_pre = $signed({1'b0, voice_in.osc_end}) - $signed({1'b0, voice_in.osc_acc});
     end
 
     // Interpolation fraction: acc[8:0] = 9-bit (29-bit storage, not MAME's 32-bit [11:3])
@@ -261,8 +241,7 @@ module ics2115_osc
             ST_SAMPLE_WAIT:    if (rom_data_valid) state_next = ST_INTERPOLATE;
             ST_INTERPOLATE:    state_next = ST_MIX;
             ST_MIX:            state_next = ST_OSC_UPDATE;
-            ST_OSC_UPDATE:     state_next = ST_BOUNDARY_CHECK;
-            ST_BOUNDARY_CHECK: state_next = ST_VOL_ENV_UPDATE;
+            ST_OSC_UPDATE:     state_next = ST_VOL_ENV_UPDATE;
             ST_VOL_ENV_UPDATE: state_next = ST_DONE;
             ST_DONE:             state_next = ST_IDLE;
             default:           state_next = ST_IDLE;
@@ -355,18 +334,7 @@ module ics2115_osc
                     // acc is 29-bit 20.9 format. acc[28:9] = 20-bit integer address
                     cur_addr <= v.osc_acc[28:9];
 
-                    // Compute next_addr for interpolation
-                    // If near loop end (forward, non-bidir), wrap to start[28:9]
-                    if (v.osc_conf[OSC_LOOP] && !v.osc_conf[OSC_BIDIR] &&
-                        (osc_left_pre < $signed({15'd0, v.osc_fc[15:1]})))
-                    begin
-                        next_addr <= v.osc_start[28:9];
-                    end else begin
-                        if (osc_conf_8bit)
-                            next_addr <= v.osc_acc[28:9] + 20'd1;
-                        else
-                            next_addr <= v.osc_acc[28:9] + 20'd2;
-                    end
+                    next_addr <= v.osc_acc[28:9] + 20'd1;
                 end
 
                 // ─────────────────────────────────────────────────────────────
@@ -492,50 +460,46 @@ module ics2115_osc
                 // equivalent to fc>>1 in 29-bit space. Step = fc[15:1].
                 // ─────────────────────────────────────────────────────────────
                 ST_OSC_UPDATE: begin
-                    osc_save <= v.osc_acc;
                     if (!v.osc_ctl[OSC_STOP] && !v.osc_ctl[OSC_DONE]) begin
-                        if (v.osc_conf[OSC_INVERT])
-                            v.osc_acc <= v.osc_acc - {14'd0, v.osc_fc[15:1]};
-                        else
-                            v.osc_acc <= v.osc_acc + {14'd0, v.osc_fc[15:1]};
-                    end
-                end
+                        logic [28:0] next_osc;
+                        logic signed [29:0] osc_left;
 
-                // ─────────────────────────────────────────────────────────────
-                // BOUNDARY_CHECK: Handle loop/stop on boundary crossing (§6.2)
-                // osc_left is computed combinationally from current v state
-                // ─────────────────────────────────────────────────────────────
-                ST_BOUNDARY_CHECK: begin
-                    if (!v.osc_ctl[OSC_STOP] && !v.osc_ctl[OSC_DONE] && (osc_left <= 30'sd0)) begin
-                        // Fire IRQ if enabled
-                        if (v.osc_conf[OSC_IRQ]) begin
-                            v.osc_conf[OSC_IRQ_PEND] <= 1'b1;
-                            irq_osc_r <= 1'b1;
+                        if (v.osc_ctl[OSC_INVERT]) begin
+                            next_osc = v.osc_acc - {14'd0, v.osc_fc[15:1]};
+                            osc_left = $signed({1'b0, next_osc}) - $signed({1'b0, v.osc_start});
+                        end else begin
+                            next_osc = v.osc_acc + {14'd0, v.osc_fc[15:1]};
+                            osc_left = $signed({1'b0, v.osc_end}) - $signed({1'b0, next_osc});
                         end
 
-                        if (v.osc_conf[OSC_LOOP]) begin
-                            // Bidirectional: flip direction
-                            if (v.osc_conf[OSC_BIDIR])
-                                v.osc_conf[OSC_INVERT] <= ~v.osc_conf[OSC_INVERT];
-
-                            // Wrap accumulator using new_invert (post-flip direction)
-                            if (new_invert) begin
-                                // Now heading reverse: acc = end + left
-                                // left is negative, so acc = end - |overshoot|
-                                v.osc_acc <= v.osc_end[28:0] + osc_left[28:0];
-                            end else begin
-                                // Now heading forward: acc = start - left
-                                // left is negative, so acc = start + |overshoot|
-                                v.osc_acc <= v.osc_start[28:0] - osc_left[28:0];
-                            end
+                        if (osc_left >= 28'sd0) begin
+                            v.osc_acc <= next_osc;
                         end else begin
-                            // One-shot: stop voice, clamp to boundary
-                            v.osc_ctl[OSC_DONE] <= 1'b1;
-                            v.osc_acc <= osc_save;
-                            /*if (!v.osc_conf[OSC_INVERT])
-                                v.osc_acc <= v.osc_end;
-                            else
-                                v.osc_acc <= v.osc_start;*/
+                            // Fire IRQ if enabled
+                            if (v.osc_conf[OSC_IRQ]) begin
+                                v.osc_conf[OSC_IRQ_PEND] <= 1'b1;
+                                irq_osc_r <= 1'b1;
+                            end
+
+                            if (v.osc_conf[OSC_LOOP]) begin
+                                // Bidirectional: flip direction
+                                if (v.osc_conf[OSC_BIDIR])
+                                    v.osc_conf[OSC_INVERT] <= ~v.osc_conf[OSC_INVERT];
+
+                                // Wrap accumulator using new_invert (post-flip direction)
+                                if (new_invert) begin
+                                    // Now heading reverse: acc = end + left
+                                    // left is negative, so acc = end - |overshoot|
+                                    v.osc_acc <= v.osc_end[28:0] + osc_left[28:0];
+                                end else begin
+                                    // Now heading forward: acc = start - left
+                                    // left is negative, so acc = start + |overshoot|
+                                    v.osc_acc <= v.osc_start[28:0] - osc_left[28:0];
+                                end
+                            end else begin
+                                // One-shot: stop voice, clamp to boundary
+                                v.osc_ctl[OSC_DONE] <= 1'b1;
+                            end
                         end
                     end
                 end
