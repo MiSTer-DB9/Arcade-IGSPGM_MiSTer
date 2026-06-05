@@ -398,9 +398,9 @@ pll pll
 
 wire reset = RESET | status[0] | buttons[1] | rom_load_busy;
 
-wire [26:0] sdr_ch1_addr, sdr_ch2_addr, sdr_ch4_addr;
-wire sdr_ch1_req, sdr_ch2_req, sdr_ch4_req;
-wire sdr_ch1_ack, sdr_ch2_ack, sdr_ch4_ack;
+wire [26:0] sdr_ch1_addr, sdr_ch2_addr, sdr_ch4_addr, sdr_ch5_addr;
+wire sdr_ch1_req, sdr_ch2_req, sdr_ch4_req, sdr_ch5_req;
+wire sdr_ch1_ack, sdr_ch2_ack, sdr_ch4_ack, sdr_ch5_ack;
 wire [31:0] sdr_ch1_dout;
 
 wire [63:0] sdr_ch2_dout;
@@ -409,6 +409,8 @@ wire [63:0] sdr_ch3_dout;
 wire sdr_ch3_ack;
 
 wire [63:0] sdr_ch4_dout;
+
+wire [63:0] sdr_ch5_dout;   // sprite A-ROM (colour)
 
 wire [26:0] sdr_cpu_addr, sdr_rom_addr;
 wire [15:0] sdr_cpu_din, sdr_rom_din;
@@ -465,7 +467,12 @@ sdram sdram
     .ch4_addr(sdr_ch4_addr),
     .ch4_dout(sdr_ch4_dout),
     .ch4_req(sdr_ch4_req),
-    .ch4_ack(sdr_ch4_ack)
+    .ch4_ack(sdr_ch4_ack),
+
+    .ch5_addr(sdr_ch5_addr),
+    .ch5_dout(sdr_ch5_dout),
+    .ch5_req(sdr_ch5_req),
+    .ch5_ack(sdr_ch5_ack)
 );
 
 ddr_if ddr_host(), ddr_romload(), ddr_x(), ddr_romload_adaptor(), ddr_romload_loader(), ddr_f2(), ddr_rotate();
@@ -720,6 +727,11 @@ PGM pgm_inst(
     .sdr_sprite_q(sdr_ch4_dout),
     .sdr_sprite_req(sdr_ch4_req),
     .sdr_sprite_ack(sdr_ch4_ack),
+
+    .sdr_arom_addr(sdr_ch5_addr),
+    .sdr_arom_q(sdr_ch5_dout),
+    .sdr_arom_req(sdr_ch5_req),
+    .sdr_arom_ack(sdr_ch5_ack),
 
     .ddr(ddr_f2),
 

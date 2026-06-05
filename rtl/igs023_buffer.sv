@@ -21,8 +21,13 @@ module IGS023_Buffer(
     input       arom_offset_t arom_offset0,
     input       arom_offset_t arom_offset1,
 
-
-    ddr_if.to_host ddr
+    // Sprite A-ROM (colour) read over SDRAM, toggle handshake (mirrors B-ROM).
+    // arom_address is a relative byte address into the A-ROM region; PGM.sv adds
+    // CART_A_ROM_SDR_BASE.
+    output reg [24:0] arom_address,
+    input      [63:0] arom_data,
+    output reg        arom_req,
+    input             arom_ack
 );
 
 localparam int NUM_LINE_BUFFERS = 8'd16;
@@ -117,12 +122,7 @@ typedef enum bit[1:0]
 
 queue_state_t queue_state = IDLE;
 
-assign ddr.write = 0;
-assign ddr.byteenable = 8'hff;
-
 wire queue_valid = |write_queue_fifo_count;
-wire queue_prefetch_busy = queue_valid || write_queue_fetch_pending || (write_queue_fetch != write_queue_head);
-assign ddr.acquire = queue_prefetch_busy || (queue_state != IDLE);
 
 reg        ddr_cache_valid = 0;
 reg [19:0] ddr_cache_addr[4];
@@ -141,9 +141,11 @@ end
 endfunction
 
 
-function automatic [31:0] ddr_addr(input arom_offset_t ofs);
+// Relative byte address of the 64-bit A-ROM word holding this pixel.  PGM.sv
+// adds CART_A_ROM_SDR_BASE before driving the SDRAM channel.
+function automatic [24:0] arom_word_addr(input arom_offset_t ofs);
 begin
-    ddr_addr = CART_A_ROM_DDR_BASE + { 7'd0, ofs.words[23:2], 3'd0 };
+    arom_word_addr = { ofs.words[23:2], 3'd0 };
 end
 endfunction
 
@@ -197,8 +199,7 @@ always_ff @(posedge clk) begin
         write_queue_fifo_count <= 0;
 
         ddr_cache_valid <= 0;
-        ddr.read <= 0;
-        ddr.addr <= 0;
+        // arom_req is a toggle handshake; leave it as-is across draw resets.
     end else begin
         if (valid_wr) begin
             write_queue_head <= write_queue_head + 1;
@@ -220,19 +221,20 @@ always_ff @(posedge clk) begin
                         line_wr_color0 <= color_value(wq_cur.arom_offset0);
                         line_wr_color1 <= color_value(wq_cur.arom_offset1);
                         pop_entry = 1;
-                    end else if (~ddr.busy) begin
-                        ddr.read <= 1;
-                        if (ddr_addr(wq_cur.arom_offset0) == ddr_addr(wq_cur.arom_offset1)) begin
-                            ddr.addr <= ddr_addr(wq_cur.arom_offset0);
-                            ddr.burstcnt <= 1;
+                    end else begin
+                        // Cache miss: fetch the missing 64-bit word(s) over SDRAM.
+                        // Two pixels in different words -> two sequential requests.
+                        if (arom_word_addr(wq_cur.arom_offset0) == arom_word_addr(wq_cur.arom_offset1)) begin
+                            arom_address <= arom_word_addr(wq_cur.arom_offset0);
+                            arom_req <= ~arom_req;
                             queue_state <= WAIT1;
-                        end else if (ddr_addr(wq_cur.arom_offset0) < ddr_addr(wq_cur.arom_offset1)) begin
-                            ddr.addr <= ddr_addr(wq_cur.arom_offset0);
-                            ddr.burstcnt <= 2;
+                        end else if (arom_word_addr(wq_cur.arom_offset0) < arom_word_addr(wq_cur.arom_offset1)) begin
+                            arom_address <= arom_word_addr(wq_cur.arom_offset0);
+                            arom_req <= ~arom_req;
                             queue_state <= WAIT2;
                         end else begin
-                            ddr.addr <= ddr_addr(wq_cur.arom_offset1);
-                            ddr.burstcnt <= 2;
+                            arom_address <= arom_word_addr(wq_cur.arom_offset1);
+                            arom_req <= ~arom_req;
                             queue_state <= WAIT2;
                         end
                     end
@@ -241,18 +243,16 @@ always_ff @(posedge clk) begin
 
             WAIT2,
             WAIT1: begin
-                if (~ddr.busy) begin
-                    ddr.read <= 0;
-                    if (ddr.rdata_ready) begin
-                        ddr_cache_valid <= 1;
-                        ddr_cache_addr[ddr.addr[4:3]] <= ddr.addr[24:5];
-                        ddr_cache_data[ddr.addr[4:3]] <= ddr.rdata;
-                        if (queue_state == WAIT2) begin
-                            ddr.addr <= ddr.addr + 8;
-                            queue_state <= WAIT1;
-                        end else begin
-                            queue_state <= IDLE; // retry now that the cache is updated
-                        end
+                if (arom_req == arom_ack) begin
+                    ddr_cache_valid <= 1;
+                    ddr_cache_addr[arom_address[4:3]] <= arom_address[24:5];
+                    ddr_cache_data[arom_address[4:3]] <= arom_data;
+                    if (queue_state == WAIT2) begin
+                        arom_address <= arom_address + 25'd8;
+                        arom_req <= ~arom_req;
+                        queue_state <= WAIT1;
+                    end else begin
+                        queue_state <= IDLE; // retry now that the cache is updated
                     end
                 end
             end

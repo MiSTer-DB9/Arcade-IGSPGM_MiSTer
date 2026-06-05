@@ -68,14 +68,15 @@ module sim_top(
     input             pause
 );
 
-wire [26:0] sdr_cpu_addr, sdr_tile_addr, sdr_sprite_addr, sdr_audio_addr, sdr_rom_addr;
-wire sdr_cpu_req, sdr_tile_req, sdr_sprite_req, sdr_audio_req, sdr_rom_req;
-reg  sdr_cpu_ack, sdr_tile_ack, sdr_sprite_ack, sdr_audio_ack, sdr_rom_ack;
+wire [26:0] sdr_cpu_addr, sdr_tile_addr, sdr_sprite_addr, sdr_arom_addr, sdr_audio_addr, sdr_rom_addr;
+wire sdr_cpu_req, sdr_tile_req, sdr_sprite_req, sdr_arom_req, sdr_audio_req, sdr_rom_req;
+reg  sdr_cpu_ack, sdr_tile_ack, sdr_sprite_ack, sdr_arom_ack, sdr_audio_ack, sdr_rom_ack;
 wire sdr_rom_rw;
 wire [1:0] sdr_rom_be;
 reg [63:0] sdr_cpu_q;
 reg [31:0] sdr_tile_q;
 reg [63:0] sdr_sprite_q;
+reg [63:0] sdr_arom_q;
 reg [63:0] sdr_audio_q;
 wire [15:0] sdr_rom_data;
 
@@ -237,7 +238,12 @@ PGM pgm_inst(
     .sdr_sprite_q(sdr_sprite_q),
     .sdr_sprite_req(sdr_sprite_req),
     .sdr_sprite_ack(sdr_sprite_ack),
-    
+
+    .sdr_arom_addr(sdr_arom_addr),
+    .sdr_arom_q(sdr_arom_q),
+    .sdr_arom_req(sdr_arom_req),
+    .sdr_arom_ack(sdr_arom_ack),
+
     .sdr_audio_addr(sdr_audio_addr),
     .sdr_audio_q(sdr_audio_q),
     .sdr_audio_req(sdr_audio_req),
@@ -297,6 +303,10 @@ always_ff @(posedge clk) begin
             4: begin
                 sdr_rom_ack <= sdr_rom_req;
             end
+            5: begin
+                sdr_arom_ack <= sdr_arom_req;
+                sdr_arom_q <= sdr_q;
+            end
             default: begin end
             endcase
 
@@ -322,6 +332,12 @@ always_ff @(posedge clk) begin
             sdr_req <= ~sdr_req;
             sdr_active <= 1;
             sdr_active_ch <= 2;
+        end else if (sdr_arom_req != sdr_arom_ack) begin
+            sdr_rw <= 1;
+            sdr_addr <= sdr_arom_addr;
+            sdr_req <= ~sdr_req;
+            sdr_active <= 1;
+            sdr_active_ch <= 5;
         end else if (sdr_cpu_req != sdr_cpu_ack) begin
             sdr_rw <= 1;
             sdr_addr <= sdr_cpu_addr;

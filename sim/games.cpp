@@ -301,9 +301,9 @@ static void LoadPgmTest()
     ClearCartConfig();
     gSimCore.mSDRAM->LoadData("pgm_b0600.u6", CART_B_ROM_SDR_BASE, 1);
     gSimCore.mSDRAM->LoadData("pgm_b0601.u8", CART_B_ROM_SDR_BASE + 0x0800000, 1);
-    gSimCore.mDDRMemory->LoadData("pgm_a0600.u1", CART_A_ROM_DDR_BASE, 1);
-    gSimCore.mDDRMemory->LoadData("pgm_a0601.u3", CART_A_ROM_DDR_BASE + 0x0800000, 1);
-    gSimCore.mDDRMemory->LoadData("pgm_a0602.u5", CART_A_ROM_DDR_BASE + 0x1000000, 1);
+    gSimCore.mSDRAM->LoadData("pgm_a0600.u1", CART_A_ROM_SDR_BASE, 1);
+    gSimCore.mSDRAM->LoadData("pgm_a0601.u3", CART_A_ROM_SDR_BASE + 0x0800000, 1);
+    gSimCore.mSDRAM->LoadData("pgm_a0602.u5", CART_A_ROM_SDR_BASE + 0x1000000, 1);
     gLoadedGameShortName = "pgm_test";
     gSimCore.SetGame(GAME_PGM_TEST);
 }
@@ -333,8 +333,8 @@ static void LoadEspgalbl()
     gSimCore.mSDRAM->LoadData("cave_t04801w064.u19", CART_TILE_ROM_SDR_BASE, 1);
     gSimCore.mSDRAM->LoadData("cave_b04801w064.u1", CART_B_ROM_SDR_BASE, 1);
     gSimCore.mSDRAM->LoadData("cave_w04801b032.u17", CART_MUSIC_ROM_SDR_BASE, 1);
-    gSimCore.mDDRMemory->LoadData("cave_a04801w064.u7", CART_A_ROM_DDR_BASE, 1);
-    gSimCore.mDDRMemory->LoadData("cave_a04802w064.u8", CART_A_ROM_DDR_BASE + 0x0800000, 1);
+    gSimCore.mSDRAM->LoadData("cave_a04801w064.u7", CART_A_ROM_SDR_BASE, 1);
+    gSimCore.mSDRAM->LoadData("cave_a04802w064.u8", CART_A_ROM_SDR_BASE + 0x0800000, 1);
 
     gSimCore.mTop->rootp->sim_top__DOT__cart_present = 1;
     gSimCore.mTop->rootp->sim_top__DOT__cart_prog_base = 0;
@@ -353,12 +353,12 @@ static void LoadOrlegend()
 
     LoadSdramData16be("p0103.rom", 0xd5e93543, CART_PROG_ROM_SDR_BASE);
     LoadSdramData("pgm_t0100.u8", 0x61425e1e, CART_TILE_ROM_SDR_BASE);
-    LoadDdrData("pgm_a0100.u5", 0x8b3bd88a, CART_A_ROM_DDR_BASE + 0x0000000);
-    LoadDdrData("pgm_a0101.u6", 0x3b9e9644, CART_A_ROM_DDR_BASE + 0x0400000);
-    LoadDdrData("pgm_a0102.u7", 0x069e2c38, CART_A_ROM_DDR_BASE + 0x0800000);
-    LoadDdrData("pgm_a0103.u8", 0x4460a3fd, CART_A_ROM_DDR_BASE + 0x0c00000);
-    LoadDdrData("pgm_a0104.u11", 0x5f8abb56, CART_A_ROM_DDR_BASE + 0x1000000);
-    LoadDdrData("pgm_a0105.u12", 0xa17a7147, CART_A_ROM_DDR_BASE + 0x1400000);
+    LoadSdramData("pgm_a0100.u5", 0x8b3bd88a, CART_A_ROM_SDR_BASE + 0x0000000);
+    LoadSdramData("pgm_a0101.u6", 0x3b9e9644, CART_A_ROM_SDR_BASE + 0x0400000);
+    LoadSdramData("pgm_a0102.u7", 0x069e2c38, CART_A_ROM_SDR_BASE + 0x0800000);
+    LoadSdramData("pgm_a0103.u8", 0x4460a3fd, CART_A_ROM_SDR_BASE + 0x0c00000);
+    LoadSdramData("pgm_a0104.u11", 0x5f8abb56, CART_A_ROM_SDR_BASE + 0x1000000);
+    LoadSdramData("pgm_a0105.u12", 0xa17a7147, CART_A_ROM_SDR_BASE + 0x1400000);
     LoadSdramData("pgm_b0100.u9", 0x69d2e48c, CART_B_ROM_SDR_BASE + 0x0000000);
     LoadSdramData("pgm_b0101.u10", 0x0d587bf3, CART_B_ROM_SDR_BASE + 0x0400000);
     LoadSdramData("pgm_b0102.u15", 0x43823c1e, CART_B_ROM_SDR_BASE + 0x0800000);
@@ -383,8 +383,8 @@ static void LoadKetbl()
     LoadSdramData16be("ketsui_u1.bin", 0x391767b4, CART_PROG_ROM_SDR_BASE, 0x200000, 0x200000);
     LoadSdramData("t04701w064.u19", 0x2665b041, CART_TILE_ROM_SDR_BASE);
     LoadSdramData("b04701w064.u1", 0x1bec008d, CART_B_ROM_SDR_BASE);
-    LoadDdrData("a04701w064.u7", 0x5ef1b94b, CART_A_ROM_DDR_BASE);
-    LoadDdrData("a04702w064.u8", 0x26d6da7f, CART_A_ROM_DDR_BASE + 0x0800000);
+    LoadSdramData("a04701w064.u7", 0x5ef1b94b, CART_A_ROM_SDR_BASE);
+    LoadSdramData("a04702w064.u8", 0x26d6da7f, CART_A_ROM_SDR_BASE + 0x0800000);
     LoadSdramData("m04701b032.u17", 0xb46e22d1, CART_MUSIC_ROM_SDR_BASE);
 
     gSimCore.mTop->rootp->sim_top__DOT__cart_present = 1;
@@ -407,8 +407,8 @@ static void LoadDdpdojblkbl()
     LoadSdramData16be("ddp_doj_u1.bin", 0xeb4ab06a, CART_PROG_ROM_SDR_BASE);
     LoadSdramData("t04401w064.u19", 0x3a95f19c, CART_TILE_ROM_SDR_BASE);
     LoadSdramData("b04401w064_corrupt.u1", 0x8cbff066, CART_B_ROM_SDR_BASE);
-    LoadDdrData("a04401w064.u7", 0xed229794, CART_A_ROM_DDR_BASE);
-    LoadDdrData("a04402w064.u8", 0x752167b0, CART_A_ROM_DDR_BASE + 0x0800000);
+    LoadSdramData("a04401w064.u7", 0xed229794, CART_A_ROM_SDR_BASE);
+    LoadSdramData("a04402w064.u8", 0x752167b0, CART_A_ROM_SDR_BASE + 0x0800000);
     LoadSdramData("m04401b032.u17", 0x5a0dbd76, CART_MUSIC_ROM_SDR_BASE);
 
     gSimCore.mTop->rootp->sim_top__DOT__cart_present = 1;
@@ -436,10 +436,10 @@ static void LoadKovblCommon(const char *shortName, const char *zipName, uint32_t
     LoadSdramData("t0600d 1610", 0xf7e6b529, CART_TILE_ROM_SDR_BASE + 0x600000);
     LoadSdramData("pgm_b0600.u5", 0x7d3cd059, CART_B_ROM_SDR_BASE + 0x000000);
     LoadSdramData("pgm_b0601.u7", 0xa0bb1c2f, CART_B_ROM_SDR_BASE + 0x800000);
-    LoadDdrData("pgm_a0600.u2", 0xd8167834, CART_A_ROM_DDR_BASE + 0x0000000);
-    LoadDdrData("pgm_a0601.u4", 0xff7a4373, CART_A_ROM_DDR_BASE + 0x0800000);
-    LoadDdrData("pgm_a0602.u6", 0xe7a32959, CART_A_ROM_DDR_BASE + 0x1000000);
-    LoadDdrData("pgm_a0603.u9", 0xec31abda, CART_A_ROM_DDR_BASE + 0x1800000);
+    LoadSdramData("pgm_a0600.u2", 0xd8167834, CART_A_ROM_SDR_BASE + 0x0000000);
+    LoadSdramData("pgm_a0601.u4", 0xff7a4373, CART_A_ROM_SDR_BASE + 0x0800000);
+    LoadSdramData("pgm_a0602.u6", 0xe7a32959, CART_A_ROM_SDR_BASE + 0x1000000);
+    LoadSdramData("pgm_a0603.u9", 0xec31abda, CART_A_ROM_SDR_BASE + 0x1800000);
     LoadSdramData("pgm_m0600.u3", 0x3ada4fd6, CART_MUSIC_ROM_SDR_BASE);
 
     gSimCore.mTop->rootp->sim_top__DOT__cart_present = 1;
@@ -478,11 +478,11 @@ static void LoadKillbld()
     // Encrypted 68000 program (decrypted in RTL).  Single WORD_SWAP ROM.
     LoadSdramData16be("p0300_v109.u9", 0x2fcee215, CART_PROG_ROM_SDR_BASE, 0, 0x200000);
     LoadSdramData("pgm_t0300.u14", 0x0922f7d9, CART_TILE_ROM_SDR_BASE);
-    LoadDdrData("pgm_a0300.u9", 0x3f9455d3, CART_A_ROM_DDR_BASE + 0x0000000);
-    LoadDdrData("pgm_a0301.u10", 0x92776889, CART_A_ROM_DDR_BASE + 0x0400000);
-    LoadDdrData("pgm_a0303.u11", 0x33f5cc69, CART_A_ROM_DDR_BASE + 0x0800000);
-    LoadDdrData("pgm_a0306.u12", 0xcc018a8e, CART_A_ROM_DDR_BASE + 0x0c00000);
-    LoadDdrData("pgm_a0307.u2", 0xbc772e39, CART_A_ROM_DDR_BASE + 0x1000000);
+    LoadSdramData("pgm_a0300.u9", 0x3f9455d3, CART_A_ROM_SDR_BASE + 0x0000000);
+    LoadSdramData("pgm_a0301.u10", 0x92776889, CART_A_ROM_SDR_BASE + 0x0400000);
+    LoadSdramData("pgm_a0303.u11", 0x33f5cc69, CART_A_ROM_SDR_BASE + 0x0800000);
+    LoadSdramData("pgm_a0306.u12", 0xcc018a8e, CART_A_ROM_SDR_BASE + 0x0c00000);
+    LoadSdramData("pgm_a0307.u2", 0xbc772e39, CART_A_ROM_SDR_BASE + 0x1000000);
     LoadSdramData("pgm_b0300.u13", 0x7f876981, CART_B_ROM_SDR_BASE + 0x0000000);
     LoadSdramData("pgm_b0302.u14", 0xeea9c502, CART_B_ROM_SDR_BASE + 0x0400000);
     LoadSdramData("pgm_b0303.u15", 0x77a9652e, CART_B_ROM_SDR_BASE + 0x0800000);
@@ -530,8 +530,8 @@ static void LoadDrgw3()
     }
 
     LoadSdramData("pgm_t0400.u18", 0xb70f3357, CART_TILE_ROM_SDR_BASE);
-    LoadDdrData("pgm_a0400.u9", 0xdd7bfd40, CART_A_ROM_DDR_BASE + 0x0000000);
-    LoadDdrData("pgm_a0401.u10", 0xcab6557f, CART_A_ROM_DDR_BASE + 0x0400000);
+    LoadSdramData("pgm_a0400.u9", 0xdd7bfd40, CART_A_ROM_SDR_BASE + 0x0000000);
+    LoadSdramData("pgm_a0401.u10", 0xcab6557f, CART_A_ROM_SDR_BASE + 0x0400000);
     LoadSdramData("pgm_b0400.u13", 0x4bb87cc0, CART_B_ROM_SDR_BASE);
     LoadSdramData("pgm_m0400.u1", 0x031eb9ce, CART_MUSIC_ROM_SDR_BASE);
 
@@ -564,11 +564,11 @@ static void LoadKovsh()
     // 68000 program (not encrypted; protection is the ARM), WORD_SWAP.
     LoadSdramData16be("pgm_p0605_v104.u1", 0x7c78e5f3, CART_PROG_ROM_SDR_BASE, 0, 0x400000);
     LoadSdramData("pgm_t0600.u11", 0x4acc1ad6, CART_TILE_ROM_SDR_BASE);
-    LoadDdrData("pgm_a0600.u1", 0xd8167834, CART_A_ROM_DDR_BASE + 0x0000000);
-    LoadDdrData("pgm_a0601.u3", 0xff7a4373, CART_A_ROM_DDR_BASE + 0x0800000);
-    LoadDdrData("pgm_a0602.u5", 0xe7a32959, CART_A_ROM_DDR_BASE + 0x1000000);
-    LoadDdrData("pgm_a0613.u7", 0xec31abda, CART_A_ROM_DDR_BASE + 0x1800000);
-    LoadDdrData("pgm_a0604_v200.u9", 0x26b59fd3, CART_A_ROM_DDR_BASE + 0x1a00000);
+    LoadSdramData("pgm_a0600.u1", 0xd8167834, CART_A_ROM_SDR_BASE + 0x0000000);
+    LoadSdramData("pgm_a0601.u3", 0xff7a4373, CART_A_ROM_SDR_BASE + 0x0800000);
+    LoadSdramData("pgm_a0602.u5", 0xe7a32959, CART_A_ROM_SDR_BASE + 0x1000000);
+    LoadSdramData("pgm_a0613.u7", 0xec31abda, CART_A_ROM_SDR_BASE + 0x1800000);
+    LoadSdramData("pgm_a0604_v200.u9", 0x26b59fd3, CART_A_ROM_SDR_BASE + 0x1a00000);
     LoadSdramData("pgm_b0600.u6", 0x7d3cd059, CART_B_ROM_SDR_BASE + 0x0000000);
     LoadSdramData("pgm_b0601.u8", 0xa0bb1c2f, CART_B_ROM_SDR_BASE + 0x0800000);
     LoadSdramData("pgm_b0602_v200.u10", 0x9df77934, CART_B_ROM_SDR_BASE + 0x0c00000);
@@ -593,9 +593,9 @@ static void LoadPhotoy2k()
     // 68000 program (encrypted; decrypted in RTL), WORD_SWAP, 2MB.
     LoadSdramData16be("pgm_p0701_v105.u2", 0xfab142e0, CART_PROG_ROM_SDR_BASE, 0, 0x200000);
     LoadSdramData("pgm_t0700.u11", 0x93943b4d, CART_TILE_ROM_SDR_BASE);
-    LoadDdrData("pgm_a0700.u2", 0x503c855b, CART_A_ROM_DDR_BASE + 0x0000000);
-    LoadDdrData("pgm_a0701.u4", 0x845e11a8, CART_A_ROM_DDR_BASE + 0x0800000);
-    LoadDdrData("pgm_a0702.u3", 0x42239e1b, CART_A_ROM_DDR_BASE + 0x1000000);
+    LoadSdramData("pgm_a0700.u2", 0x503c855b, CART_A_ROM_SDR_BASE + 0x0000000);
+    LoadSdramData("pgm_a0701.u4", 0x845e11a8, CART_A_ROM_SDR_BASE + 0x0800000);
+    LoadSdramData("pgm_a0702.u3", 0x42239e1b, CART_A_ROM_SDR_BASE + 0x1000000);
     LoadSdramData("pgm_b0700.u7", 0x8cd027f6, CART_B_ROM_SDR_BASE + 0x0000000);
     LoadSdramData("photo_y2k_cg_v101_u6.u6", 0xda02ec3e, CART_B_ROM_SDR_BASE + 0x0800000);
     LoadSdramData("pgm_m0700.u5", 0xacc7afce, CART_MUSIC_ROM_SDR_BASE);
@@ -640,11 +640,11 @@ static void LoadKov2()
     // 68000 program (plaintext, WORD_SWAP, 4MB).
     LoadSdramData16be("v107_u18.u18", 0x661a5b2c, CART_PROG_ROM_SDR_BASE, 0, 0x400000);
     LoadSdramData("pgm_t1200.u27", 0xd7e26609, CART_TILE_ROM_SDR_BASE);
-    LoadDdrData("pgm_a1200.u1", 0xceeb81d8, CART_A_ROM_DDR_BASE + 0x0000000);
-    LoadDdrData("pgm_a1201.u4", 0x21063ca7, CART_A_ROM_DDR_BASE + 0x0800000);
-    LoadDdrData("pgm_a1202.u6", 0x4bb92fae, CART_A_ROM_DDR_BASE + 0x1000000);
-    LoadDdrData("pgm_a1203.u8", 0xe73cb627, CART_A_ROM_DDR_BASE + 0x1800000);
-    LoadDdrData("pgm_a1204.u10", 0x14b4b5bb, CART_A_ROM_DDR_BASE + 0x2000000);
+    LoadSdramData("pgm_a1200.u1", 0xceeb81d8, CART_A_ROM_SDR_BASE + 0x0000000);
+    LoadSdramData("pgm_a1201.u4", 0x21063ca7, CART_A_ROM_SDR_BASE + 0x0800000);
+    LoadSdramData("pgm_a1202.u6", 0x4bb92fae, CART_A_ROM_SDR_BASE + 0x1000000);
+    LoadSdramData("pgm_a1203.u8", 0xe73cb627, CART_A_ROM_SDR_BASE + 0x1800000);
+    LoadSdramData("pgm_a1204.u10", 0x14b4b5bb, CART_A_ROM_SDR_BASE + 0x2000000);
     LoadSdramData("pgm_b1200.u5", 0xbed7d994, CART_B_ROM_SDR_BASE + 0x0000000);
     LoadSdramData("pgm_b1201.u7", 0xf251eb57, CART_B_ROM_SDR_BASE + 0x0800000);
     LoadSdramData("pgm_m1200.u3", 0xb0d88720, CART_MUSIC_ROM_SDR_BASE);

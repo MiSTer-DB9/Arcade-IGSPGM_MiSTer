@@ -44,6 +44,11 @@ module PGM(
     output reg        sdr_sprite_req,
     input             sdr_sprite_ack,
 
+    output reg [26:0] sdr_arom_addr,
+    input      [63:0] sdr_arom_q,
+    output reg        sdr_arom_req,
+    input             sdr_arom_ack,
+
     output reg [26:0] sdr_audio_addr,
     input      [63:0] sdr_audio_q,
     output reg        sdr_audio_req,
@@ -71,11 +76,12 @@ module PGM(
 
 wire clk = clk_50m;
 
-ddr_if ddr_ss(), ddr_arom(), ddr_arm(), ddr_prot(), ddr_iram(), ddr_lo(), ddr_lo2(), ddr_lo3();
+ddr_if ddr_ss(), ddr_arm(), ddr_prot(), ddr_iram(), ddr_lo(), ddr_lo2();
 
-// DDR arbitration (priority: savestates > sprite A-ROM > external ARM ROM >
-// protection ROM cache > internal RAM cache).  Each protection memory has its
-// own cache so they never thrash each other (exrom 8MB, internal ROM, iram).
+// DDR arbitration (priority: savestates > external ARM ROM > protection ROM
+// cache > internal RAM cache).  Each protection memory has its own cache so they
+// never thrash each other (exrom 8MB, internal ROM, iram).  The sprite A-ROM
+// moved to SDRAM (ch5), so it is no longer a DDR client.
 ddr_mux ddr_mux_hi(
     .clk,
     .x(ddr),
@@ -85,18 +91,12 @@ ddr_mux ddr_mux_hi(
 ddr_mux ddr_mux_lo(
     .clk,
     .x(ddr_lo),
-    .a(ddr_arom),
+    .a(ddr_arm),
     .b(ddr_lo2)
 );
 ddr_mux ddr_mux_lo2(
     .clk,
     .x(ddr_lo2),
-    .a(ddr_arm),
-    .b(ddr_lo3)
-);
-ddr_mux ddr_mux_lo3(
-    .clk,
-    .x(ddr_lo3),
     .a(ddr_prot),
     .b(ddr_iram)
 );
@@ -673,12 +673,16 @@ assign blue = { igs023_color[4:0], igs023_color[4:2] };
 
 wire [23:0] igs023_sdr_tile_addr;
 wire [23:0] igs023_sdr_sprite_addr;
+wire [24:0] igs023_sdr_arom_addr;
 wire [15:0] igs023_dma_addr;
 assign sdr_tile_addr = (cart_present && (igs023_sdr_tile_addr >= cart_tile_base))
                         ? CART_TILE_ROM_SDR_BASE[26:0] + { 3'd0, igs023_sdr_tile_addr - cart_tile_base }
                         : BIOS_TILE_ROM_SDR_BASE[26:0] + { 3'd0, igs023_sdr_tile_addr };
 
 assign sdr_sprite_addr = CART_B_ROM_SDR_BASE[26:0] + { 3'd0, igs023_sdr_sprite_addr };
+
+// Sprite A-ROM (colour) lives in SDRAM at CART_A_ROM_SDR_BASE (its own channel).
+assign sdr_arom_addr   = CART_A_ROM_SDR_BASE[26:0] + { 2'd0, igs023_sdr_arom_addr };
 
 
 
@@ -732,7 +736,10 @@ IGS023 #(.SS_IDX(SSIDX_IGS023)) igs023(
     .sprite_brom_req(sdr_sprite_req),
     .sprite_brom_ack(sdr_sprite_ack),
 
-    .ddr(ddr_arom),
+    .sprite_arom_address(igs023_sdr_arom_addr),
+    .sprite_arom_data(sdr_arom_q),
+    .sprite_arom_req(sdr_arom_req),
+    .sprite_arom_ack(sdr_arom_ack),
 
     .irq6(irq6),
     .irq4(irq4),

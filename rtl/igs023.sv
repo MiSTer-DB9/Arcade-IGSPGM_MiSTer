@@ -49,7 +49,11 @@ module IGS023 #(parameter SS_IDX=-1) (
     output reg        sprite_brom_req,
     input             sprite_brom_ack,
 
-    ddr_if.to_host    ddr,
+    // Sprite A-ROM (colour) over SDRAM, toggle handshake (relative byte address).
+    output     [24:0] sprite_arom_address,
+    input      [63:0] sprite_arom_data,
+    output            sprite_arom_req,
+    input             sprite_arom_ack,
 
     output reg        irq6 /* verilator public_flat */,
     output reg        irq4 /* verilator public_flat */,
@@ -255,7 +259,11 @@ IGS023_Sprite sprite(
     .brom_data(sprite_brom_data),
     .brom_req(sprite_brom_req),
     .brom_ack(sprite_brom_ack),
-    .ddr(ddr)
+
+    .arom_address(sprite_arom_address),
+    .arom_data(sprite_arom_data),
+    .arom_req(sprite_arom_req),
+    .arom_ack(sprite_arom_ack)
 );
 
 reg [12:0] color_addr;

@@ -19,6 +19,7 @@ package system_consts;
     parameter int SSIDX_IGS027A_XOR   = 17;   // exrom XOR table (1KB)
 
     parameter bit [31:0] SS_DDR_BASE         = 32'h3E00_0000;
+    // Free DDR window (was the sprite A-ROM, now moved to SDRAM).
     parameter bit [31:0] CART_A_ROM_DDR_BASE = 32'h3800_0000;
     parameter bit [31:0] DOWNLOAD_DDR_BASE   = 32'h3000_0000;
     parameter bit [31:0] CART_ARM_ROM_DDR_BASE = 32'h3C00_0000;
@@ -27,28 +28,30 @@ package system_consts;
     parameter bit [31:0] PROT_ROM_DDR_BASE     = 32'h3CB0_0000; // igs022 64KB private data ROM
 
     /*
-    
-    BIOS
-    - PROG - 1M 
-    - TILE - 2M
-    - MUSIC - 2M
+    SDRAM map (128 MB, 2x 64 MB chips; chip = addr[26]).  Latency-sensitive
+    graphics (tiles + sprite B + sprite A) live in SDRAM; A fills chip 1.
 
-    CART
-    - PROG - 16M
-    - TILE - 32M
-    - MUSIC - 32M
-    - B - 16M
-    - A - 64M
+    chip 0 (0x0000_0000-0x03FF_FFFF):
+      BIOS  PROG  1M  @ 0x0000_0000
+      BIOS  TILE  2M  @ 0x0010_0000
+      BIOS  MUSIC 2M  @ 0x0030_0000
+      CART  PROG  8M  @ 0x0080_0000
+      CART  TILE 16M  @ 0x0100_0000
+      CART  MUSIC 16M @ 0x0200_0000
+      CART  B    16M  @ 0x0300_0000
+    chip 1 (0x0400_0000-0x07FF_FFFF):
+      CART  A    64M  @ 0x0400_0000
     */
 
     parameter bit [31:0] BIOS_PROG_ROM_SDR_BASE   = 32'h0000_0000;
     parameter bit [31:0] BIOS_TILE_ROM_SDR_BASE   = 32'h0010_0000;
     parameter bit [31:0] BIOS_MUSIC_ROM_SDR_BASE  = 32'h0030_0000;
 
-    parameter bit [31:0] CART_PROG_ROM_SDR_BASE   = 32'h0100_0000;
-    parameter bit [31:0] CART_TILE_ROM_SDR_BASE   = 32'h0200_0000;
-    parameter bit [31:0] CART_MUSIC_ROM_SDR_BASE  = 32'h0400_0000;
-    parameter bit [31:0] CART_B_ROM_SDR_BASE      = 32'h0600_0000;
+    parameter bit [31:0] CART_PROG_ROM_SDR_BASE   = 32'h0080_0000;
+    parameter bit [31:0] CART_TILE_ROM_SDR_BASE   = 32'h0100_0000;
+    parameter bit [31:0] CART_MUSIC_ROM_SDR_BASE  = 32'h0200_0000;
+    parameter bit [31:0] CART_B_ROM_SDR_BASE      = 32'h0300_0000;
+    parameter bit [31:0] CART_A_ROM_SDR_BASE      = 32'h0400_0000;
 
     typedef enum bit [3:0] {
         STORAGE_SDR,
@@ -74,7 +77,7 @@ package system_consts;
     parameter region_t REGION_CART_PROG_ROM      = '{ base_addr:CART_PROG_ROM_SDR_BASE,      storage:STORAGE_SDR,   encoding:ENCODING_SWAP16, base_idx:1  };
     parameter region_t REGION_CART_TILE_ROM      = '{ base_addr:CART_TILE_ROM_SDR_BASE,      storage:STORAGE_SDR,   encoding:ENCODING_NORMAL, base_idx:2  };
     parameter region_t REGION_CART_MUSIC_ROM     = '{ base_addr:CART_MUSIC_ROM_SDR_BASE,     storage:STORAGE_SDR,   encoding:ENCODING_NORMAL, base_idx:3  };
-    parameter region_t REGION_CART_A_ROM         = '{ base_addr:CART_A_ROM_DDR_BASE,         storage:STORAGE_DDR,   encoding:ENCODING_NORMAL, base_idx:0  };
+    parameter region_t REGION_CART_A_ROM         = '{ base_addr:CART_A_ROM_SDR_BASE,         storage:STORAGE_SDR,   encoding:ENCODING_NORMAL, base_idx:0  };
     parameter region_t REGION_CART_B_ROM         = '{ base_addr:CART_B_ROM_SDR_BASE,         storage:STORAGE_SDR,   encoding:ENCODING_NORMAL, base_idx:0  };
     parameter region_t REGION_IGS022_ROM         = '{ base_addr:PROT_ROM_DDR_BASE,           storage:STORAGE_DDR,   encoding:ENCODING_NORMAL, base_idx:8  };
     parameter region_t REGION_IGS027_IROM        = '{ base_addr:PROT_INT_ROM_DDR_BASE,       storage:STORAGE_DDR,   encoding:ENCODING_NORMAL, base_idx:9  };

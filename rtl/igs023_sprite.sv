@@ -27,8 +27,12 @@ module IGS023_Sprite(
     input      [63:0] brom_data,
     output reg        brom_req,
     input             brom_ack,
-    
-    ddr_if.to_host    ddr
+
+    // Sprite A-ROM (colour) over SDRAM, toggle handshake (relative byte address).
+    output [24:0] arom_address,
+    input  [63:0] arom_data,
+    output        arom_req,
+    input         arom_ack
 );
 
 typedef enum bit [4:0] {
@@ -767,7 +771,10 @@ IGS023_Buffer line_buffer(
     .line(draw_line),
     .ready(buffer_ready),
 
-    .ddr(ddr)
+    .arom_address(arom_address),
+    .arom_data(arom_data),
+    .arom_req(arom_req),
+    .arom_ack(arom_ack)
 );
 
 
