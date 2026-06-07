@@ -86,7 +86,7 @@ video_mixer #(.LINE_LENGTH(324), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
     .CE_PIXEL(CE_PIXEL),
 
     .scandoubler(use_scandoubler),
-    .hq2x(scandoubler_fx == 1),
+    .hq2x(0), // TODO - disabled due to memory pressure
     .gamma_bus(gamma_bus),
 
     .HBlank(core_hb),

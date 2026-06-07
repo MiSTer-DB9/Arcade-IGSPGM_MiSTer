@@ -56,7 +56,7 @@ module PGM(
 
     ddr_if.to_host    ddr,
 
-    output     [15:0] audio_out,
+    output logic [15:0] audio_out,
     input       [1:0] audio_filter_en,
 
     input             ss_do_save,
@@ -1092,7 +1092,12 @@ ics2115 #(.SS_IDX(SSIDX_ICS2115)) ics2115(
     .ssbus(ssb[SSIDX_ICS2115])
 );
 
-assign audio_out = ics2115_audio_left;
+
+always_comb begin
+    logic [17:0] audio_combined;
+    audio_combined = {{2{ics2115_audio_left[15]}}, ics2115_audio_left } + {{2{ics2115_audio_right[15]}}, ics2115_audio_right};
+    audio_out = audio_combined[17:2];
+end
 
 logic [15:0] io_q;
 always_comb begin

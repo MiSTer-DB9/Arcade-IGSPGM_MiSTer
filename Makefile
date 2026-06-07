@@ -40,9 +40,12 @@ mister/%: releases/% deploy.done
 	scp "$<" $(MISTER):/media/fat/_Development/
 	ssh $(MISTER) "echo 'load_core _Development/$(notdir $<)' > /dev/MiSTer_cmd"
 
-mister: mister/PGM.mra
+mister: mister/PGM\ (Polygame\ Master)\ System\ BIOS.mra
 mister/espgalbl: mister/espgalbl.mra
 mister/ketbl: mister/ketbl.mra
+mister/killbld: mister/killbld.mra
+mister/kovsh: mister/kovsh.mra
+mister/kov2: mister/kov2.mra
 
 mister/test:
 	$(MAKE) -j8 -C testroms TARGET=pgm_test mister
