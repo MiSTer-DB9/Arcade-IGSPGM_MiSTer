@@ -285,7 +285,8 @@ module igs027a #(
     endfunction
 
     wire [13:0] m68k_sw  = m68k_share_hw[14:1];
-    wire        m68k_shi = ~m68k_share_hw[0];   // BYTE_XOR_LE: high half when hw index even
+    wire        m68k_shi = arm_has_exrom ?  m68k_share_hw[0]    // type2/3
+                                         : ~m68k_share_hw[0];   // type1 (unchanged)
 
     assign m68k_share_q = m68k_shi ? q_share_68k[31:16] : q_share_68k[15:0];
 

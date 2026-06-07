@@ -167,29 +167,13 @@ rom_loader rom_loader(
     .base_idx(rom_base_idx)
 );
 
-reg prev_rom_load_busy;
-
 always_ff @(posedge clk) begin
-    prev_rom_load_busy <= rom_load_busy;
-
-    if (rom_load_busy & ~prev_rom_load_busy) begin
-        cart_present <= 0;
-    end
 
     if (rom_set_map_base) begin
         case (rom_base_idx)
-            1: begin
-                cart_prog_base <= rom_map_base[23:0];
-                cart_present <= 1;
-            end
-            2: begin
-                cart_tile_base <= rom_map_base[23:0];
-                cart_present <= 1;
-            end
-            3: begin
-                cart_music_base <= rom_map_base[23:0];
-                cart_present <= 1;
-            end
+            1: begin cart_prog_base  <= rom_map_base[23:0]; cart_present <= 1; end
+            2: begin cart_tile_base  <= rom_map_base[23:0]; cart_present <= 1; end
+            3: begin cart_music_base <= rom_map_base[23:0]; cart_present <= 1; end
             default: begin end
         endcase
     end

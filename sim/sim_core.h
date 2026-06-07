@@ -36,6 +36,7 @@ enum class MemoryRegion : int
     CART_B_ROM,
     CART_A_ROM,
     PROT_RAM,
+    CART_ARM_ROM,   // DDR: external ARM ROM @0x3C000000, internal @0x3C900000
 
     COUNT
 };

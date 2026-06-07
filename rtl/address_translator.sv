@@ -94,9 +94,11 @@ always_comb begin
             ROMn = ROMn | ~ARM_SHAREn | ~ARM_LATCHn;           // carve out of ROM window
         end
 
-        // IGS027A type2 (kov2): shared RAM 0xd00000-0xd0ffff (64KB),
-        // latch 0xd10000-0xd10001.  These sit above ROM space, no carve-out.
-        if (game == GAME_KOV2) begin
+        // IGS027A type2 (kov2/kov2p/ddp2/martmast/dw2001/dwpc): shared RAM
+        // 0xd00000-0xd0ffff (64KB), latch 0xd10000-0xd10001.  Above ROM space,
+        // no carve-out.
+        if (game == GAME_KOV2 || game == GAME_KOV2P || game == GAME_DDP2 ||
+            game == GAME_MARTMAST || game == GAME_DW2001 || game == GAME_DWPC) begin
             ARM_SHAREn = ~(cpu_word_addr[23:16] == 8'hd0);     // 0xd00000-0xd0ffff
             ARM_LATCHn = ~(cpu_word_addr[23:1] == 23'h688000); // 0xd10000-0xd10001
         end

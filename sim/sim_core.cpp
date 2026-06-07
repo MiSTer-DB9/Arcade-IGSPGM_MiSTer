@@ -100,6 +100,9 @@ void SimCore::Init()
     SetMemory(MemoryRegion::CART_TILE_ROM, std::make_unique<MemorySlice>(*mSDRAM, CART_TILE_ROM_SDR_BASE, 32 * 1024 * 1024));
     SetMemory(MemoryRegion::CART_MUSIC_ROM, std::make_unique<MemorySlice>(*mSDRAM, CART_MUSIC_ROM_SDR_BASE, 32 * 1024 * 1024));
     SetMemory(MemoryRegion::CART_B_ROM, std::make_unique<MemorySlice>(*mSDRAM, CART_B_ROM_SDR_BASE, 64 * 1024 * 1024));
+    // DDR-backed IGS027A ARM ROMs (debug read): raw external @0x3C000000 (offset 0),
+    // internal @0x3C900000 (offset 0x900000).
+    SetMemory(MemoryRegion::CART_ARM_ROM, std::make_unique<MemorySlice>(*mDDRMemory, 0x3C000000u, 16 * 1024 * 1024));
     // IGS022 shared protection RAM (0x300000-0x303fff): split hi/lo byte arrays.
     SetMemory(MemoryRegion::PROT_RAM, std::make_unique<Memory16b>(
         mTop->rootp->PGM_SIGNAL(igs022, sharedram_lo, ram).m_storage,

@@ -61,7 +61,8 @@ package system_consts;
 
     typedef enum bit [3:0] {
         ENCODING_NORMAL,
-        ENCODING_SWAP16
+        ENCODING_SWAP16,
+        ENCODING_ENCRYPTED
     } region_encoding_t;
 
     typedef struct packed {
@@ -71,18 +72,20 @@ package system_consts;
         bit [3:0]  base_idx;
     } region_t;
 
-    parameter region_t REGION_BIOS_PROG_ROM      = '{ base_addr:BIOS_PROG_ROM_SDR_BASE,      storage:STORAGE_SDR,   encoding:ENCODING_SWAP16, base_idx:0 };
+
+    parameter region_t REGION_BIOS_PROG_ROM      = '{ base_addr:BIOS_PROG_ROM_SDR_BASE,      storage:STORAGE_SDR,   encoding:ENCODING_NORMAL, base_idx:0 };
     parameter region_t REGION_BIOS_TILE_ROM      = '{ base_addr:BIOS_TILE_ROM_SDR_BASE,      storage:STORAGE_SDR,   encoding:ENCODING_NORMAL, base_idx:0 };
     parameter region_t REGION_BIOS_MUSIC_ROM     = '{ base_addr:BIOS_MUSIC_ROM_SDR_BASE,     storage:STORAGE_SDR,   encoding:ENCODING_NORMAL, base_idx:0  };
-    parameter region_t REGION_CART_PROG_ROM      = '{ base_addr:CART_PROG_ROM_SDR_BASE,      storage:STORAGE_SDR,   encoding:ENCODING_SWAP16, base_idx:1  };
+    parameter region_t REGION_CART_PROG_ROM      = '{ base_addr:CART_PROG_ROM_SDR_BASE,      storage:STORAGE_SDR,   encoding:ENCODING_ENCRYPTED, base_idx:1  };
     parameter region_t REGION_CART_TILE_ROM      = '{ base_addr:CART_TILE_ROM_SDR_BASE,      storage:STORAGE_SDR,   encoding:ENCODING_NORMAL, base_idx:2  };
     parameter region_t REGION_CART_MUSIC_ROM     = '{ base_addr:CART_MUSIC_ROM_SDR_BASE,     storage:STORAGE_SDR,   encoding:ENCODING_NORMAL, base_idx:3  };
     parameter region_t REGION_CART_A_ROM         = '{ base_addr:CART_A_ROM_SDR_BASE,         storage:STORAGE_SDR,   encoding:ENCODING_NORMAL, base_idx:0  };
     parameter region_t REGION_CART_B_ROM         = '{ base_addr:CART_B_ROM_SDR_BASE,         storage:STORAGE_SDR,   encoding:ENCODING_NORMAL, base_idx:0  };
-    parameter region_t REGION_IGS022_ROM         = '{ base_addr:PROT_ROM_DDR_BASE,           storage:STORAGE_DDR,   encoding:ENCODING_NORMAL, base_idx:8  };
-    parameter region_t REGION_IGS027_IROM        = '{ base_addr:PROT_INT_ROM_DDR_BASE,       storage:STORAGE_DDR,   encoding:ENCODING_NORMAL, base_idx:9  };
+    parameter region_t REGION_IGS022_ROM         = '{ base_addr:PROT_ROM_DDR_BASE,           storage:STORAGE_DDR,   encoding:ENCODING_NORMAL, base_idx:0  };
+    parameter region_t REGION_IGS027_IROM        = '{ base_addr:PROT_INT_ROM_DDR_BASE,       storage:STORAGE_DDR,   encoding:ENCODING_NORMAL, base_idx:0  };
+    parameter region_t REGION_CART_ARM_ROM       = '{ base_addr:CART_ARM_ROM_DDR_BASE,       storage:STORAGE_DDR,   encoding:ENCODING_ENCRYPTED, base_idx:0 };
 
-    parameter region_t LOAD_REGIONS[10] = '{
+    parameter region_t LOAD_REGIONS[11] = '{
         REGION_BIOS_PROG_ROM,
         REGION_BIOS_TILE_ROM,
         REGION_BIOS_MUSIC_ROM,
@@ -92,7 +95,8 @@ package system_consts;
         REGION_CART_A_ROM,
         REGION_CART_B_ROM,
         REGION_IGS022_ROM,
-        REGION_IGS027_IROM
+        REGION_IGS027_IROM,
+        REGION_CART_ARM_ROM
     };
 
     // Values MUST match the C++ `Game` enum in sim/games.h (board_cfg = game << 8).
@@ -102,7 +106,12 @@ package system_consts;
         GAME_DRGW3    = 8'd10,
         GAME_KOVSH    = 8'd11,
         GAME_PHOTOY2K = 8'd12,
-        GAME_KOV2     = 8'd13
+        GAME_KOV2     = 8'd13,
+        GAME_KOV2P    = 8'd14,
+        GAME_DDP2     = 8'd15,
+        GAME_MARTMAST = 8'd16,
+        GAME_DW2001   = 8'd17,
+        GAME_DWPC     = 8'd18
     } game_t;
 
     typedef struct packed {

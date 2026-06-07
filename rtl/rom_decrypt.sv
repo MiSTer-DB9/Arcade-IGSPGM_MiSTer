@@ -95,7 +95,7 @@ always_comb begin
         endcase
     end
 
-    rom_word_out = {rom_word_in[7:0], rom_word_in[15:8]} ^ x;
+    rom_word_out = rom_word_in ^ x;
 end
 
 endmodule

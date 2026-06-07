@@ -19,6 +19,11 @@ enum Game : uint8_t
     GAME_KOVSH,
     GAME_PHOTOY2K,
     GAME_KOV2,
+    GAME_KOV2P,
+    GAME_DDP2,
+    GAME_MARTMAST,
+    GAME_DW2001,
+    GAME_DWPC,
 
     N_GAMES,
 

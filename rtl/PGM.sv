@@ -515,18 +515,10 @@ address_translator address_translator(
     .SS_VECn
 );
 
-wire [15:0] rom_q_cleartext;
-rom_decrypt rom_decrypt(
-    .game        (game),
-    .word_addr   (cpu_addr),
-    .rom_word_in (rom_q),
-    .rom_word_out(rom_q_cleartext)
-);
-
 assign cpu_data_in = ~SS_SAVEn ? ss_irq_handler[cpu_addr[3:0]] :
                      ~SS_RESETn ? ss_reset_vector[cpu_addr[1:0]] :
                      ~SS_VECn ? ( cpu_addr[0] ? 16'h0000 : 16'h00ff ) :
-                     ~ROMn ? rom_q_cleartext :
+                     ~ROMn ? rom_q :
                      ~WORKRAMn ? workram_q :
                      ~IGS023n ? igs023_q :
                      ~IOn ? io_q :
@@ -879,7 +871,10 @@ pgm_asic3 #(.SS_IDX(SSIDX_ASIC3)) asic3(
 // igs027a (ARM) and igs022 are mutually exclusive per game, so one cache (its
 // tag/data block RAM) serves whichever is active.  The active engine drives the
 // single request port; rdata/ready fan out to both.
-wire arm_game = (game == GAME_KOVSH) || (game == GAME_PHOTOY2K) || (game == GAME_KOV2);
+// IGS027A ARM type2/3 games: 64KB shared RAM @0xd00000, latch @0xd10000 (FIQ),
+wire arm_type2 = (game == GAME_KOV2)  || (game == GAME_KOV2P)   || (game == GAME_DDP2) ||
+                 (game == GAME_MARTMAST) || (game == GAME_DW2001) || (game == GAME_DWPC);
+wire arm_game = (game == GAME_KOVSH) || (game == GAME_PHOTOY2K) || arm_type2;
 wire i22_game = (game == GAME_KILLBLD) || (game == GAME_DRGW3);
 
 wire [31:0] a27_cache_addr, i22_cache_addr;
@@ -968,8 +963,12 @@ igs022 #(
 logic [9:0] arm_cen_n, arm_cen_m;
 always_comb begin
     case (game)
-        // 22 MHz and 24 MHz devices are added here as type2/3 land.
-        default: begin arm_cen_n = 10'd2; arm_cen_m = 10'd5; end // 20 MHz
+        // 22 MHz (11/25) parts: martmast / dw2001 / dwpc (and type3 dmnfrnt/theglad).
+        GAME_MARTMAST,
+        GAME_DW2001,
+        GAME_DWPC: begin arm_cen_n = 10'd11; arm_cen_m = 10'd25; end // 22 MHz
+        // 20 MHz (2/5): kovsh/photoy2k (type1), kov2/kov2p/ddp2 (type2 55857F).
+        default:   begin arm_cen_n = 10'd2;  arm_cen_m = 10'd5;  end // 20 MHz
     endcase
 end
 
@@ -990,12 +989,12 @@ wire        igs027a_ss_ready;
 
 // Shared-RAM halfword offset within the window: type1 64B @0x4f0000 (5-bit),
 // type2 64KB @0xd00000 (15-bit).  FIQ is set by the type2 latch write (0xd10000).
-wire [14:0] arm_share_hw = (game == GAME_KOV2) ? cpu_word_addr[15:1]
-                                               : {10'd0, cpu_word_addr[5:1]};
-wire        arm_fiq_set  = (game == GAME_KOV2) & ~ARM_LATCHn & ~cpu_rw & ~(&cpu_ds_n);
+wire [14:0] arm_share_hw = arm_type2 ? cpu_word_addr[15:1]
+                                     : {10'd0, cpu_word_addr[5:1]};
+wire        arm_fiq_set  = arm_type2 & ~ARM_LATCHn & ~cpu_rw & ~(&cpu_ds_n);
 // type2/3 games have an external ARM ROM served from DDR; type1 (kovsh/photoy2k)
 // does not, and must not route its 0x08xxxxxx stub probes into the DDR cache.
-wire        arm_has_exrom = (game == GAME_KOV2);
+wire        arm_has_exrom = arm_type2;
 
 igs027a #(
     .TYPE(1),
