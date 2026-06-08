@@ -71,7 +71,9 @@ module PGM(
     input             cart_present,
     input      [23:0] cart_prog_base,
     input      [23:0] cart_tile_base,
-    input      [23:0] cart_music_base
+    input      [23:0] cart_music_base,
+
+    input      [64:0] mister_rtc
 );
 
 wire clk = clk_50m;
@@ -1091,7 +1093,9 @@ V3021 v3021(
     .wr_n(v3021_wr_n),
 
     .in(v3021_din),
-    .out(v3021_dout)
+    .out(v3021_dout),
+
+    .mister_rtc(mister_rtc)
 );
 
 
