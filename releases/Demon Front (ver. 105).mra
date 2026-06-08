@@ -70,7 +70,7 @@
              rest = BX lr (e12fff1e) fill.  -->
         <part>09 00004000 00000000</part>
         <part>38 04 A0 E3 05 10 A0 E3 58 11 80 E5 40 24 A0 E3 00 30 A0 E3 18 30 82 E5 58 11 80 E5 01 30 A0 E3 18 30 82 E5 10 D4 A0 E3 04 DC 8D E3 80 06 A0 E3 10 FF 2F E1</part>
-        <part repeat="16332">1E FF 2F E1</part>
+        <part repeat="4083">1E FF 2F E1</part>
 
         <!-- IGS027A EXTERNAL ARM ROM (encrypted; decrypted at load) -->
         <part>0a 00400000 00000000</part>
