@@ -50,7 +50,7 @@ module IGS023 #(parameter SS_IDX=-1) (
     input             sprite_brom_ack,
 
     // Sprite A-ROM (colour) over SDRAM, toggle handshake (relative byte address).
-    output     [24:0] sprite_arom_address,
+    output     [25:0] sprite_arom_address,
     input      [63:0] sprite_arom_data,
     output            sprite_arom_req,
     input             sprite_arom_ack,

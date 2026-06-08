@@ -344,7 +344,7 @@ module igs027a #(
     wire [31:0] ramc_wr_data = ss_iram_own ? ssbus_iram.data[31:0] : arm_wdata;
     wire [3:0]  ramc_wr_be   = ss_iram_own ? 4'hf : wr_be;
 
-    ram_cache #(.LINES(512), .DDR_BASE(PROT_IRAM_DDR_BASE)) iram_cache (
+    ram_cache #(.LINES(256), .DDR_BASE(PROT_IRAM_DDR_BASE)) iram_cache (
         .clk(clk), .reset(reset),
         .rd_req(ramc_rd_req),
         .rd_addr(ramc_rd_addr),

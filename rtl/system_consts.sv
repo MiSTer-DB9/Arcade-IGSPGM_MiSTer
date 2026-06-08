@@ -126,7 +126,7 @@ package system_consts;
 
     typedef struct packed
     {
-        bit [23:0] words;
+        bit [24:0] words;
         bit [1:0]  sub;
     } arom_offset_t;
 

@@ -24,7 +24,7 @@ module IGS023_Buffer(
     // Sprite A-ROM (colour) read over SDRAM, toggle handshake (mirrors B-ROM).
     // arom_address is a relative byte address into the A-ROM region; PGM.sv adds
     // CART_A_ROM_SDR_BASE.
-    output reg [24:0] arom_address,
+    output reg [25:0] arom_address,
     input      [63:0] arom_data,
     output reg        arom_req,
     input             arom_ack
@@ -143,9 +143,9 @@ endfunction
 
 // Relative byte address of the 64-bit A-ROM word holding this pixel.  PGM.sv
 // adds CART_A_ROM_SDR_BASE before driving the SDRAM channel.
-function automatic [24:0] arom_word_addr(input arom_offset_t ofs);
+function automatic [25:0] arom_word_addr(input arom_offset_t ofs);
 begin
-    arom_word_addr = { ofs.words[23:2], 3'd0 };
+    arom_word_addr = { ofs.words[24:2], 3'd0 };
 end
 endfunction
 

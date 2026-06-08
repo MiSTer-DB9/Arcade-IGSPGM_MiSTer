@@ -683,7 +683,7 @@ assign blue = { igs023_color[4:0], igs023_color[4:2] };
 
 wire [23:0] igs023_sdr_tile_addr;
 wire [23:0] igs023_sdr_sprite_addr;
-wire [24:0] igs023_sdr_arom_addr;
+wire [25:0] igs023_sdr_arom_addr;
 wire [15:0] igs023_dma_addr;
 assign sdr_tile_addr = (cart_present && (igs023_sdr_tile_addr >= cart_tile_base))
                         ? CART_TILE_ROM_SDR_BASE[26:0] + { 3'd0, igs023_sdr_tile_addr - cart_tile_base }
@@ -692,7 +692,7 @@ assign sdr_tile_addr = (cart_present && (igs023_sdr_tile_addr >= cart_tile_base)
 assign sdr_sprite_addr = CART_B_ROM_SDR_BASE[26:0] + { 3'd0, igs023_sdr_sprite_addr };
 
 // Sprite A-ROM (colour) lives in SDRAM at CART_A_ROM_SDR_BASE (its own channel).
-assign sdr_arom_addr   = CART_A_ROM_SDR_BASE[26:0] + { 2'd0, igs023_sdr_arom_addr };
+assign sdr_arom_addr   = CART_A_ROM_SDR_BASE[26:0] + { 1'd0, igs023_sdr_arom_addr };
 
 
 
