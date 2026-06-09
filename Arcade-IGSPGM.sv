@@ -384,8 +384,8 @@ assign mame_p4[BTN_START] = kb_start[3];
 // [MiSTer-DB9-Pro BEGIN] - DB controllers muted while OSD is open
 // PGM bit map: A,B,C,D = joydb_1[7:4]; Start = joydb_1[10]; Coin = joydb_1[11]
 // (Step 6b Rule 2: 4 game buttons > 3 -> coin is joydb_1[11] only, no Start+B chord)
-wire [15:0] joystick_p1 = joydb_1ena ? (OSD_STATUS ? 16'b0 : {4'b0, joydb_1[11:10], 2'b0, joydb_1[7:4], joydb_1[3:0]}) : joystick_p1_USB;
-wire [15:0] joystick_p2 = joydb_2ena ? (OSD_STATUS ? 16'b0 : {4'b0, joydb_2[11:10], 2'b0, joydb_2[7:4], joydb_2[3:0]}) : joydb_1ena ? joystick_p1_USB : joystick_p2_USB;
+wire [15:0] joystick_p1 = joydb_1ena ? (OSD_STATUS ? 16'b0 : joydb_1_mapped[11:0]) : joystick_p1_USB;
+wire [15:0] joystick_p2 = joydb_2ena ? (OSD_STATUS ? 16'b0 : joydb_2_mapped[11:0]) : joydb_1ena ? joystick_p1_USB : joystick_p2_USB;
 // [MiSTer-DB9-Pro END]
 wire [15:0] input_p1 = joystick_p1 | mame_p1;
 wire [15:0] input_p2 = joystick_p2 | mame_p2;
