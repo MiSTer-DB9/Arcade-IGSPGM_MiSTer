@@ -116,7 +116,8 @@ package system_consts;
         GAME_DW2001   = 8'd17,
         GAME_DWPC     = 8'd18,
         GAME_DMNFRNT  = 8'd19,   // IGS027A type3 (55857G), 22 MHz
-        GAME_THEGLAD  = 8'd20    // IGS027A type3 (55857G), 22 MHz
+        GAME_THEGLAD  = 8'd20,   // IGS027A type3 (55857G), 22 MHz
+        GAME_SVG      = 8'd21    // IGS027A type3 (55857G), 33 MHz
     } game_t;
 
     typedef struct packed {

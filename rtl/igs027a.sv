@@ -159,6 +159,7 @@ module igs027a #(
     wire [31:0] dbg_r12  /* verilator public_flat */ = dbg_regs[12];
     wire        dbg_we   /* verilator public_flat */ = arm_write;
     wire        dbg_mreq /* verilator public_flat */ = arm_mreq;
+    wire [31:0] dbg_cpsr_pub /* verilator public_flat */ = dbg_cpsr;  // ARM CPSR: [4:0]=mode, [6]=F, [7]=I
     assign arm_rdata_dbg = arm_rdata;
     assign arm_wdata_dbg = arm_wdata;
 
@@ -280,6 +281,9 @@ module igs027a #(
         (arm_size == 2'd1) ? (arm_addr[1] ? 4'b1100 : 4'b0011) :
                              (4'b0001 << arm_addr[1:0]);
     wire        arm_rd = arm_advance & arm_mreq & ~arm_write;
+
+    // TODO: can this just be cleared after some duration?
+    wire        arm_fiq_taken = arm_rd & (arm_addr == 32'h0000_001c);
 
     logic        wr_pend;
     logic [31:0] wr_addr;
@@ -560,13 +564,10 @@ module igs027a #(
                 counter <= counter + 32'd1;   // type1 0x4000000c post-increments
             end
 
-            // type2 sets FIQ via the latch write (0xd10000) and clears on the ARM
-            // latch read (0x38000000); type3 sets via the NMI write (0x5c0000) and
-            // clears on the ARM latch read (0x48000000).
-            if (m68k_fiq_set || m68k_nmi_set)            fiq_level <= 1'b1;
-            else if (arm_rd && (sel_lat_t2 || sel_lat_t3)) fiq_level <= 1'b0;
+            if (m68k_fiq_set || m68k_nmi_set)                  fiq_level <= 1'b1;
+            else if (arm_type3 ? arm_fiq_taken : (arm_rd && sel_lat_t2)) fiq_level <= 1'b0;
             if (m68k_fiq_set || m68k_nmi_set) fiq_set_count <= fiq_set_count + 16'd1;   // debug
-            if (arm_rd && (sel_lat_t2 || sel_lat_t3)) fiq_clr_count <= fiq_clr_count + 16'd1;
+            if (arm_type3 ? arm_fiq_taken : (arm_rd && sel_lat_t2)) fiq_clr_count <= fiq_clr_count + 16'd1;
 
             if (~m68k_latch_cs_n && m68k_latch_we) begin
                 if (m68k_latch_off)

@@ -896,7 +896,7 @@ wire arm_type2 = (game == GAME_KOV2)  || (game == GAME_KOV2P)   || (game == GAME
                  (game == GAME_MARTMAST) || (game == GAME_DW2001) || (game == GAME_DWPC);
 // IGS027A type3 (55857G): dmnfrnt/theglad.  68k share 0x500000 (double-buffered),
 // latch 0x5c0300, ARM FIQ pulse on 68k write to 0x5c0000.
-wire arm_type3 = (game == GAME_DMNFRNT) || (game == GAME_THEGLAD);
+wire arm_type3 = (game == GAME_DMNFRNT) || (game == GAME_THEGLAD) || (game == GAME_SVG);
 wire arm_game = (game == GAME_KOVSH) || (game == GAME_PHOTOY2K) || arm_type2 || arm_type3;
 wire i22_game = (game == GAME_KILLBLD) || (game == GAME_DRGW3);
 
@@ -992,6 +992,8 @@ always_comb begin
         GAME_DWPC,
         GAME_DMNFRNT,
         GAME_THEGLAD: begin arm_cen_n = 10'd11; arm_cen_m = 10'd25; end // 22 MHz
+        // 33 MHz (33/50): svg (type3 55857G, 33 MHz XTAL).
+        GAME_SVG:     begin arm_cen_n = 10'd33; arm_cen_m = 10'd50; end // 33 MHz
         // 20 MHz (2/5): kovsh/photoy2k (type1), kov2/kov2p/ddp2 (type2 55857F).
         default:   begin arm_cen_n = 10'd2;  arm_cen_m = 10'd5;  end // 20 MHz
     endcase

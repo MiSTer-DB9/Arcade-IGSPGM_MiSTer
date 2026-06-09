@@ -108,7 +108,7 @@ always_comb begin
         // IGS027A type3 (dmnfrnt/theglad): shared RAM 0x500000-0x50ffff (64KB,
         // double-buffered), command latch 0x5c0300-0x5c0301, ARM FIQ pulse on a
         // write to 0x5c0000-0x5c0001.  All sit inside the ROM window -> carve out.
-        if (game == GAME_DMNFRNT || game == GAME_THEGLAD) begin
+        if (game == GAME_DMNFRNT || game == GAME_THEGLAD || game == GAME_SVG) begin
             ARM_SHAREn = ~(cpu_word_addr[23:16] == 8'h50);     // 0x500000-0x50ffff
             ARM_LATCHn = ~(cpu_word_addr[23:1]  == 23'h2e0180);// 0x5c0300-0x5c0301
             ARM_NMIn   = ~(cpu_word_addr[23:1]  == 23'h2e0000);// 0x5c0000-0x5c0001

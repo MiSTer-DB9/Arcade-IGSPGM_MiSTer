@@ -89,6 +89,9 @@ module exrom_decrypt(
                 // type3: high byte from per-game table indexed by i[8:1]
                 GAME_DMNFRNT: m = {DFRONT_TAB[i[8:1]],  c8(i), c7(i), c6(i), c5(i), c4a(i),c3(i), c2(i), c1a(i)};
                 GAME_THEGLAD: m = {THEGLAD_TAB[i[8:1]], c8a(i),c7(i), c6a(i),c5(i), c4a(i),c3(i), c2(i), c1a(i)};
+                // svg: pgm_svg_decrypt applies only the IGS27 bit permutations, with
+                // NO high-byte table XOR (high byte unchanged).
+                GAME_SVG:     m = {8'd0,                c8a(i),c7(i), c6(i), c5a(i),c4a(i),c3(i), c2a(i),c1a(i)};
                 default:      m = 16'd0;
             endcase
             addr_xor = m;

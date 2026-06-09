@@ -129,7 +129,7 @@ always @(posedge sys_clk) begin
         BASE_0: if (ioctl_wr) begin map_base[31:24] <= ioctl_data; stage <= BASE_1; end
         BASE_1: if (ioctl_wr) begin map_base[23:16] <= ioctl_data; stage <= BASE_2; end
         BASE_2: if (ioctl_wr) begin map_base[15:8] <= ioctl_data; stage <= BASE_3; end
-        BASE_3: if (ioctl_wr) begin 
+        BASE_3: if (ioctl_wr) begin
             map_base[7:0] <= ioctl_data;
             set_map_base <= 1;
             offset <= 0;

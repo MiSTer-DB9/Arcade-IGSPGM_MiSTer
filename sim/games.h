@@ -26,6 +26,7 @@ enum Game : uint8_t
     GAME_DWPC,
     GAME_DMNFRNT,
     GAME_THEGLAD,
+    GAME_SVG,
 
     N_GAMES,
 
