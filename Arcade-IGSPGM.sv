@@ -405,6 +405,8 @@ wire [7:0]  info_index;
 
 wire [127:0] status_in = { status[127:43], ss_slot, status[40:0] };
 
+wire [64:0] mister_rtc;
+
 hps_io #(.CONF_STR(CONF_STR)) hps_io
 (
     .clk_sys(clk_sys),
@@ -456,6 +458,8 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 
     .ps2_key(ps2_key),
+
+    .RTC(mister_rtc),
     // [MiSTer-DB9 BEGIN] - DB9/SNAC8 support: joy_raw for OSD navigation
     .joy_raw(OSD_STATUS ? joy_raw_payload : 16'b0),
     // programmable remap matrix selector load (UIO_DB9_MAP 0xFD)
@@ -838,6 +842,8 @@ PGM pgm_inst(
     .ss_do_save(ss_save),
     .ss_do_restore(ss_load),
     .ss_state_out(),
+
+    .mister_rtc(mister_rtc),
 
     .sync_fix
 );

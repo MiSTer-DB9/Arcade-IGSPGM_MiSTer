@@ -30,6 +30,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/gamebub-arm/generated/Control
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/gamebub-arm/generated/ARM7TDMI.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/arm_rom_cache.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/prot_cache.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/share_cache.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/ram_cache.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/igs027a.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/v3021.sv

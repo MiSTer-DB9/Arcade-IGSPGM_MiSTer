@@ -16,6 +16,7 @@ module address_translator(
     output logic IGS022_RAMn,
     output logic ARM_SHAREn,
     output logic ARM_LATCHn,
+    output logic ARM_NMIn,
     output logic SS_SAVEn,
     output logic SS_RESETn,
     output logic SS_VECn
@@ -40,6 +41,7 @@ always_comb begin
     IGS022_RAMn = 1;
     ARM_SHAREn = 1;
     ARM_LATCHn = 1;
+    ARM_NMIn = 1;
 
     SS_SAVEn = 1;
     SS_RESETn = 1;
@@ -68,7 +70,9 @@ always_comb begin
     if (~&cpu_ds_n) begin
         ROMn = match_addr_n(cpu_word_addr, 16'h0000, 16'h8000);
         WORKRAMn = match_addr_n(cpu_word_addr, 16'h8000, 16'hf000);
-        IGS023n = match_addr_n(cpu_word_addr, 16'h9000, 16'hff00) & match_addr_n(cpu_word_addr, 16'ha000, 16'hff00) & match_addr_n(cpu_word_addr, 16'hb000, 16'hff00);
+        IGS023n = match_addr_n(cpu_word_addr, 16'h9000, 16'hf000)
+            & match_addr_n(cpu_word_addr, 16'ha000, 16'hf000)
+            & match_addr_n(cpu_word_addr, 16'hb000, 16'hf000);
         IGS026_Xn = match_addr_n(cpu_word_addr, 16'hc000, 16'hfe00);
         IOn = match_addr_n(cpu_word_addr, 16'hc080, 16'hffff);
 
@@ -94,6 +98,16 @@ always_comb begin
             ROMn = ROMn | ~ARM_SHAREn | ~ARM_LATCHn;           // carve out of ROM window
         end
 
+        // IGS027A type1 (CAVE: ket/espgal/ddp3) with the recreated internal ROM.
+        if (game == GAME_KET || game == GAME_ESPGAL) begin
+            ARM_LATCHn = ~(cpu_word_addr[23:2] == 22'h100000); // 0x400000-0x400003
+            ROMn = ROMn | ~ARM_LATCHn;
+        end
+        if (game == GAME_DDP3) begin
+            ARM_LATCHn = ~(cpu_word_addr[23:2] == 22'h140000); // 0x500000-0x500003
+            ROMn = ROMn | ~ARM_LATCHn;
+        end
+
         // IGS027A type2 (kov2/kov2p/ddp2/martmast/dw2001/dwpc): shared RAM
         // 0xd00000-0xd0ffff (64KB), latch 0xd10000-0xd10001.  Above ROM space,
         // no carve-out.
@@ -101,6 +115,16 @@ always_comb begin
             game == GAME_MARTMAST || game == GAME_DW2001 || game == GAME_DWPC) begin
             ARM_SHAREn = ~(cpu_word_addr[23:16] == 8'hd0);     // 0xd00000-0xd0ffff
             ARM_LATCHn = ~(cpu_word_addr[23:1] == 23'h688000); // 0xd10000-0xd10001
+        end
+
+        // IGS027A type3 (dmnfrnt/theglad): shared RAM 0x500000-0x50ffff (64KB,
+        // double-buffered), command latch 0x5c0300-0x5c0301, ARM FIQ pulse on a
+        // write to 0x5c0000-0x5c0001.  All sit inside the ROM window -> carve out.
+        if (game == GAME_DMNFRNT || game == GAME_THEGLAD || game == GAME_SVG) begin
+            ARM_SHAREn = ~(cpu_word_addr[23:16] == 8'h50);     // 0x500000-0x50ffff
+            ARM_LATCHn = ~(cpu_word_addr[23:1]  == 23'h2e0180);// 0x5c0300-0x5c0301
+            ARM_NMIn   = ~(cpu_word_addr[23:1]  == 23'h2e0000);// 0x5c0000-0x5c0001
+            ROMn = ROMn | ~ARM_SHAREn | ~ARM_LATCHn | ~ARM_NMIn;
         end
     end
 end

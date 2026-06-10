@@ -50,7 +50,7 @@ module IGS023 #(parameter SS_IDX=-1) (
     input             sprite_brom_ack,
 
     // Sprite A-ROM (colour) over SDRAM, toggle handshake (relative byte address).
-    output     [24:0] sprite_arom_address,
+    output     [25:0] sprite_arom_address,
     input      [63:0] sprite_arom_data,
     output            sprite_arom_req,
     input             sprite_arom_ack,
@@ -300,8 +300,16 @@ always_ff @(posedge clk) begin
     end
 end
 
+function automatic [14:0] vram_phys(input [14:0] a);
+    if (~a[14])              vram_phys = {3'b000, a[11:0]}; // BG mirror
+    else if (a[13] & ~a[12]) vram_phys = {3'b100, a[11:0]}; // FG mirror
+    else                     vram_phys = a;                 // rowscroll
+endfunction
+
+logic [14:0] vram_addr_raw;
+
 always_comb begin
-    vram_addr = fg_fpga_vram_master ? fg_vram_addr : bg_vram_addr;
+    vram_addr_raw = fg_fpga_vram_master ? fg_vram_addr : bg_vram_addr;
     vram_we_n = 1;
     vram_dout = 0;
 
@@ -323,7 +331,7 @@ always_comb begin
         RAM_ACCESS_VRAM_HIGH_SETUP,
         RAM_ACCESS_VRAM_HIGH_HOLD: begin
             if (vram_cpu_bus_free) begin
-                vram_addr = {cpu_addr[14:1], 1'b1};
+                vram_addr_raw = {cpu_addr[14:1], 1'b1};
                 vram_we_n = cpu_rw;
                 vram_dout = cpu_din[15:8];
             end
@@ -332,12 +340,14 @@ always_comb begin
         RAM_ACCESS_VRAM_LOW_SETUP,
         RAM_ACCESS_VRAM_LOW_HOLD: begin
             if (vram_cpu_bus_free) begin
-                vram_addr = {cpu_addr[14:1], 1'b0};
+                vram_addr_raw = {cpu_addr[14:1], 1'b0};
                 vram_we_n = cpu_rw;
                 vram_dout = cpu_din[7:0];
             end
         end
     endcase
+
+    vram_addr = vram_phys(vram_addr_raw);
 end
 
 reg vblank_prev;

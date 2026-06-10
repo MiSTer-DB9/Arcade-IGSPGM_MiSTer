@@ -250,7 +250,9 @@ PGM pgm_inst(
 
     .sync_fix(sync_fix),
     
-    .pause(pause)
+    .pause(pause),
+
+    .mister_rtc(65'b0)
 );
 
 reg sdr_active;

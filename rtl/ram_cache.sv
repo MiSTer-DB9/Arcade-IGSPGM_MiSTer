@@ -32,7 +32,6 @@ module ram_cache #(
     localparam int TAGB = 32 - OFFB - IDXB;
     localparam int AW   = IDXB + 3;               // data store address: {idx, word[2:0]}
 
-    logic [TAGB-1:0] ctag  [0:LINES-1];
     logic            cvalid[0:LINES-1];
     logic            cdirty[0:LINES-1];
 
@@ -43,8 +42,14 @@ module ram_cache #(
     wire [TAGB-1:0] wr_tag  = wr_addr[31:OFFB+IDXB];
     wire [2:0]      wr_wsel = wr_addr[4:2];
 
-    wire rd_hit = rd_req & cvalid[rd_idx] & (ctag[rd_idx] == rd_tag);
-    wire wr_hit = wr_req & cvalid[wr_idx] & (ctag[wr_idx] == wr_tag);
+
+    logic [31:2] rd_word_d, wr_word_d;
+    always_ff @(posedge clk) begin
+        rd_word_d <= rd_addr[31:2];
+        wr_word_d <= wr_addr[31:2];
+    end
+    wire rd_stable = (rd_addr[31:2] == rd_word_d);
+    wire wr_stable = (wr_addr[31:2] == wr_word_d);
 
     // miss / writeback / fill FSM
     typedef enum logic [2:0] { IDLE, WB_RD, WB_DDR, FILL_REQ, FILL } state_t;
@@ -61,6 +66,8 @@ module ram_cache #(
     wire is_idle = (state == IDLE);
     wire fill_we = (state == FILL) & ddr.rdata_ready;
 
+    logic just_filled;
+
     // data store (LINES*8 x 32, dual-port byte-enabled)
     logic        pa_we, pb_we;
     logic [AW-1:0] pa_addr, pb_addr;
@@ -72,31 +79,57 @@ module ram_cache #(
         .clock_b(clk), .wren_b(pb_we), .byteena_b(pb_be), .address_b(pb_addr), .data_b(pb_data), .q_b(pb_q)
     );
 
+    wire tag_we = (state == FILL) & ~ddr.busy & ddr.rdata_ready & (beat == BEATS[1:0]-2'd1);
+    wire [TAGB-1:0] rd_tag_q, wr_tag_q;
+    dualport_ram_unreg #(.WIDTH(TAGB), .WIDTHAD(IDXB)) ctag_rd(
+        .clock_a(clk), .wren_a(tag_we), .address_a(m_idx),  .data_a(m_tag), .q_a(),
+        .clock_b(clk), .wren_b(1'b0),   .address_b(rd_idx), .data_b('0),    .q_b(rd_tag_q)
+    );
+    dualport_ram_unreg #(.WIDTH(TAGB), .WIDTHAD(IDXB)) ctag_wr(
+        .clock_a(clk), .wren_a(tag_we), .address_a(m_idx),  .data_a(m_tag), .q_a(),
+        .clock_b(clk), .wren_b(1'b0),   .address_b(wr_idx), .data_b('0),    .q_b(wr_tag_q)
+    );
+    wire rd_hit = rd_req & rd_stable & cvalid[rd_idx] & (rd_tag_q == rd_tag);
+    wire wr_hit = wr_req & wr_stable & cvalid[wr_idx] & (wr_tag_q == wr_tag);
+
+    wire [1:0] m_wbeat = wr_wsel[2:1];
+    wire       m_whalf = wr_wsel[0];
+    function automatic logic [31:0] bmerge(input logic [31:0] o, input logic [31:0] n, input logic [3:0] be);
+        bmerge = { be[3] ? n[31:24] : o[31:24], be[2] ? n[23:16] : o[23:16],
+                   be[1] ? n[15:8]  : o[15:8],  be[0] ? n[7:0]   : o[7:0] };
+    endfunction
+    wire fill_wr_lo = m_write & (beat == m_wbeat) & ~m_whalf;
+    wire fill_wr_hi = m_write & (beat == m_wbeat) &  m_whalf;
+
     // Port muxing: IDLE = ARM access; WB_RD = stream victim out port B;
-    // FILL = write both words of each beat via A (low) + B (high).
+    // FILL = write both words of each beat via A (low) + B (high), merging the
+    // pending store on its word.
     always_comb begin
         pa_we = 1'b0; pa_addr = {wr_idx, wr_wsel}; pa_data = wr_data; pa_be = wr_be;
         pb_we = 1'b0; pb_addr = {rd_idx, rd_wsel}; pb_data = 32'd0;   pb_be = 4'hf;
         unique case (state)
-            IDLE:  pa_we = wr_hit;                       // commit write-hit
+            IDLE:  pa_we = wr_hit;                       // commit write-hit (line already valid)
             WB_RD: pb_addr = {m_idx, wbw[2:0]};          // read victim word
             FILL: begin
-                pa_we = fill_we; pa_addr = {m_idx, beat, 1'b0}; pa_data = ddr.rdata[31:0];  pa_be = 4'hf;
-                pb_we = fill_we; pb_addr = {m_idx, beat, 1'b1}; pb_data = ddr.rdata[63:32]; pb_be = 4'hf;
+                pa_we = fill_we; pa_addr = {m_idx, beat, 1'b0};
+                pa_data = fill_wr_lo ? bmerge(ddr.rdata[31:0], wr_data, wr_be) : ddr.rdata[31:0];
+                pa_be = 4'hf;
+                pb_we = fill_we; pb_addr = {m_idx, beat, 1'b1};
+                pb_data = fill_wr_hi ? bmerge(ddr.rdata[63:32], wr_data, wr_be) : ddr.rdata[63:32];
+                pb_be = 4'hf;
             end
             default: ;
         endcase
     end
 
-    // read serve: 1-cycle registered settle (as prot_cache)
-    logic [31:2] rd_waddr_d;
-    logic        rd_hit_d;
-    wire rd_dvalid = rd_hit & rd_hit_d & (rd_addr[31:2] == rd_waddr_d);
-    assign rd_data  = pb_q;
-    assign rd_ready = ~rd_req | (is_idle & rd_dvalid);
 
-    // write serve: a write-hit commits this cycle in IDLE
-    assign wr_ready = ~wr_req | (is_idle & wr_hit);
+    assign rd_data  = pb_q;
+    assign rd_ready = ~rd_req | (is_idle & rd_hit & ~just_filled);
+
+
+    logic wr_ready_r;
+    always_ff @(posedge clk) wr_ready_r <= reset ? 1'b0 : (is_idle & wr_hit & ~just_filled);
+    assign wr_ready = ~wr_req | wr_ready_r;
 
     assign ddr.acquire    = (state != IDLE);
     assign ddr.byteenable = 8'hff;
@@ -110,33 +143,33 @@ module ram_cache #(
             ddr.addr   <= 32'd0;
             ddr.wdata  <= 64'd0;
             ddr.burstcnt <= 8'd0;
-            rd_waddr_d <= '0;
-            rd_hit_d   <= 1'b0;
+            just_filled <= 1'b0;
             for (i = 0; i < LINES; i = i + 1) begin
                 cvalid[i] <= 1'b0;
                 cdirty[i] <= 1'b0;
             end
         end else begin
-            rd_waddr_d <= rd_addr[31:2];
-            rd_hit_d   <= rd_hit;
-
+            just_filled <= 1'b0;
             unique case (state)
                 IDLE: begin
                     ddr.read  <= 1'b0;
                     ddr.write <= 1'b0;
                     // write-hit commits via port A (above); mark dirty
                     if (wr_hit) cdirty[wr_idx] <= 1'b1;
-                    // miss: write port has priority over read port
-                    if (wr_req & ~wr_hit) begin
+                    // miss: write port has priority over read port.  Gate on the
+                    // line being stable so the registered tag (hence ~hit) is
+                    // valid for the current index before declaring a miss.  The
+                    // victim tag is the just-read tag BRAM output (rd/wr_tag_q).
+                    if (wr_req & wr_stable & ~wr_hit & ~just_filled) begin
                         m_write <= 1'b1; m_idx <= wr_idx; m_tag <= wr_tag;
                         m_base  <= {wr_addr[31:OFFB], {OFFB{1'b0}}};
-                        v_base  <= {ctag[wr_idx], wr_idx, {OFFB{1'b0}}};
+                        v_base  <= {wr_tag_q, wr_idx, {OFFB{1'b0}}};
                         wbw     <= 4'd0; beat <= 2'd0;
                         state   <= (cvalid[wr_idx] & cdirty[wr_idx]) ? WB_RD : FILL_REQ;
-                    end else if (rd_req & ~rd_hit) begin
+                    end else if (rd_req & rd_stable & ~rd_hit & ~just_filled) begin
                         m_write <= 1'b0; m_idx <= rd_idx; m_tag <= rd_tag;
                         m_base  <= {rd_addr[31:OFFB], {OFFB{1'b0}}};
-                        v_base  <= {ctag[rd_idx], rd_idx, {OFFB{1'b0}}};
+                        v_base  <= {rd_tag_q, rd_idx, {OFFB{1'b0}}};
                         wbw     <= 4'd0; beat <= 2'd0;
                         state   <= (cvalid[rd_idx] & cdirty[rd_idx]) ? WB_RD : FILL_REQ;
                     end
@@ -187,9 +220,12 @@ module ram_cache #(
                             // both words written via cdata ports A/B (above)
                             beat <= beat + 2'd1;
                             if (beat == BEATS[1:0]-2'd1) begin
-                                ctag[m_idx]   <= m_tag;
+                                // tag written to both tag BRAMs via tag_we (above)
                                 cvalid[m_idx] <= 1'b1;
-                                cdirty[m_idx] <= 1'b0;   // freshly filled, clean
+                                // write-allocate merged the store into the fill, so
+                                // the line is dirty; a read fill is clean.
+                                cdirty[m_idx] <= m_write;
+                                just_filled   <= 1'b1;   // suppress 1-cycle re-fill
                                 state         <= IDLE;
                             end
                         end

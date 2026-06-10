@@ -26,7 +26,7 @@
         <!-- REGION_CART_B_ROM     = 07 -->
 
         <!-- SYSTEM INFO -->
-		<part>00 00</part>
+		<part>0b 00</part>
 
         <!-- BIOS PROG -->
 		<part>00 00020000 00000000</part>
@@ -60,5 +60,9 @@
         <!-- B ROM -->
         <part>07 00800000 00000000</part>
 	    <part name="b04401w064_corrupt.u1" crc="8cbff066"/>
+	
+	<!-- IGS027A INTERNAL ARM ROM (16KB -> block RAM) -->
+        <part>09 00004000 00000000</part>
+        <part name="kovsh_v100_china.asic" crc="0f09a5c1"/>
 	</rom>
 </misterromdescription>

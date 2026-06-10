@@ -64,7 +64,9 @@ module V3021(
     input wr_n,
 
     input in,
-    output reg out
+    output reg out,
+
+    input [64:0] mister_rtc
 );
 
 reg [7:0] ram[16];
@@ -112,6 +114,8 @@ always_ff @(posedge clk) begin
         cnt <= cnt + 1;
     end
 end
+
+reg mister_rtc_prev;
 
 always_ff @(posedge clk) begin
     prev_cs_n <= cs_n;
@@ -166,6 +170,19 @@ always_ff @(posedge clk) begin
                 end
             end
         endcase
+    end else if (state == 0 ) begin
+        mister_rtc_prev <= mister_rtc[64];
+        if (mister_rtc[64] != mister_rtc_prev) begin
+            ram[2] <= mister_rtc[7:0];
+            ram[3] <= mister_rtc[15:8];
+            ram[4] <= mister_rtc[23:16];
+            ram[5] <= mister_rtc[31:24];
+            ram[6] <= mister_rtc[39:32];
+            ram[7] <= mister_rtc[47:40];
+            ram[8] <= mister_rtc[55:48];
+            ram[9] <= mister_rtc[63:56]; // week not valid?
+            copy_to_clock <= 1;
+        end
     end
 end
 

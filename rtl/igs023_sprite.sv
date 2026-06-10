@@ -29,7 +29,7 @@ module IGS023_Sprite(
     input             brom_ack,
 
     // Sprite A-ROM (colour) over SDRAM, toggle handshake (relative byte address).
-    output [24:0] arom_address,
+    output [25:0] arom_address,
     input  [63:0] arom_data,
     output        arom_req,
     input         arom_ack
@@ -215,11 +215,11 @@ begin
 
     sum3 = { 1'b0, a[1:0] } + { 1'b0, num[1:0] };
     if (sum3 > 2) begin
-        add_offset.words = a.words + { 21'd0, num[4:2] } + 1;
+        add_offset.words = a.words + { 22'd0, num[4:2] } + 1;
         sum3 = sum3 - 3'd3;
         add_offset.sub = sum3[1:0];
     end else begin
-        add_offset.words = a.words + { 21'd0, num[4:2] };
+        add_offset.words = a.words + { 22'd0, num[4:2] };
         add_offset.sub[1:0] = sum3[1:0];
     end
 end
@@ -252,11 +252,11 @@ begin
 
     if ({ 1'b0, a[1:0] } >= { 1'b0, num[1:0] }) begin
         diff3 = { 1'b0, a[1:0] } - { 1'b0, num[1:0] };
-        sub_offset.words = a.words - { 21'd0, num[4:2] };
+        sub_offset.words = a.words - { 22'd0, num[4:2] };
         sub_offset.sub = diff3[1:0];
     end else begin
         diff3 = { 1'b0, a[1:0] } + 3'd3 - { 1'b0, num[1:0] };
-        sub_offset.words = a.words - { 21'd0, num[4:2] } - 1'b1;
+        sub_offset.words = a.words - { 22'd0, num[4:2] } - 1'b1;
         sub_offset.sub = diff3[1:0];
     end
 end
@@ -422,10 +422,10 @@ always_ff @(posedge clk) begin
                         dma_state <= PRESCAN_INITIAL_NEXT;
                     end else begin
                         tmp_addr32 = { brom_extract(brom_data, 1), brom_extract(brom_data, 0) };
-                        spr.arom_offset.words <= tmp_addr32[25:2];
+                        spr.arom_offset.words <= tmp_addr32[26:2];
                         spr.arom_offset.sub <= tmp_addr32[1:0];
                         spr.brom_offset <= 2;
-                        spr_saved.arom_offset.words <= tmp_addr32[25:2];
+                        spr_saved.arom_offset.words <= tmp_addr32[26:2];
                         spr_saved.arom_offset.sub <= tmp_addr32[1:0];
                         spr_saved.brom_offset <= 2;
                          
@@ -444,10 +444,10 @@ always_ff @(posedge clk) begin
                     spr.brom_cache <= brom_data;
                     spr_saved.brom_cache <= brom_data;
                     tmp_addr32 = { brom_extract(brom_data, 1), initial_addr_low };
-                    spr.arom_offset.words <= tmp_addr32[25:2];
+                    spr.arom_offset.words <= tmp_addr32[26:2];
                     spr.arom_offset.sub <= tmp_addr32[1:0];
                     spr.brom_offset <= 2;
-                    spr_saved.arom_offset.words <= tmp_addr32[25:2];
+                    spr_saved.arom_offset.words <= tmp_addr32[26:2];
                     spr_saved.arom_offset.sub <= tmp_addr32[1:0];
                     spr_saved.brom_offset <= 2;
                     dma_state <= PRESCAN_SCAN_TO_START;

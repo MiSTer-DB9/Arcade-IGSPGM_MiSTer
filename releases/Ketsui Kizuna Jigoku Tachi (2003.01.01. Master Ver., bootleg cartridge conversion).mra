@@ -42,7 +42,7 @@
 
         <!-- CART PROG -->
         <part>03 00200000 00000000</part>
-        <part name="ketsui_u1.bin" offset="2097152" length="2097152"/>
+        <part name="ketsui_u1.bin" crc="391767B4" offset="2097152" length="2097152"/>
 
         <!-- CART TILE -->
         <part>04 00800000 00180000</part>
