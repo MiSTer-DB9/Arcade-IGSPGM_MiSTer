@@ -1,7 +1,7 @@
 <misterromdescription>
-	<!-- IGS027A ARM type3 (55857G), 33 MHz part.  External ARM ROM (2x4MB) decrypt: pgm_svg_decrypt (no high-byte table).  68k program plaintext. -->
-	<name>S.V.G. - Spectral vs Generation (ver. 200)</name>
-	<setname>svg</setname>
+	<!-- IGS027A ARM type3 (55857G), 24 MHz part.  External ARM ROM decrypt: pgm_happy6_decrypt.  68k program plaintext.  Gfx/audio ROMs are address-scrambled; the core descrambles them during load. -->
+	<name>Happy 6-in-1 (M68K V101, ARM V102CN)</name>
+	<setname>happy6</setname>
 	<rbf>IGSPGM</rbf>
 	<rotation>horizontal</rotation>
 	<mameversion>277</mameversion>
@@ -16,9 +16,9 @@
 		<dip name="Unused 2" bits="6" ids="On,Off"/>
 		<dip name="Debug" bits="7" ids="On,Off"/>
 	</switches>
-	<rom index="0" address="0x30000000" zip="pgm.zip|svg.zip">
-        <!-- SYSTEM INFO (game id = 21) -->
-		<part>15 00</part>
+	<rom index="0" address="0x30000000" zip="pgm.zip|happy6.zip">
+        <!-- SYSTEM INFO (game id = 26) -->
+		<part>1a 00</part>
 
         <!-- BIOS PROG / TILE / MUSIC -->
         <part>00 00020000 00000000</part>
@@ -30,28 +30,24 @@
 
         <!-- CART PROG (68k, plaintext) -->
         <part>03 00080000 00100000</part>
-        <part name="svg_v200_u30.u30" crc="34c18f3f"/>
+        <part name="s101xx_u5.u5" crc="aa4646e3"/>
 
-        <!-- CART TILE -->
-        <part>04 00200000 00180000</part>
-        <part name="igs_t05601w016.u29" crc="03e110dc"/>
+        <!-- CART TILE (scrambled; descrambled by the core at load) -->
+        <part>04 00800000 00180000</part>
+        <part name="t01w64m_u29.u29" crc="2d3feb8b"/>
 
-        <!-- CART MUSIC (ICS @0x400000) -->
-        <part>05 00c00000 00400000</part>
-        <part name="igs_w05601b064.u5" crc="bfe61a71"/>
-        <part name="igs_w05602b032.u7" crc="0685166d"/>
+        <!-- CART MUSIC (ICS @0x400000; scrambled) -->
+        <part>05 00800000 00400000</part>
+        <part name="w01w64m_u17.u17" crc="7e23e2be"/>
 
-        <!-- A ROM (sprite colour) -->
-        <part>06 01c00000 00000000</part>
-        <part name="igs_a05601w064.u3" crc="ea6453e4"/>
-        <part name="igs_a05602w064.u4" crc="6d00621b"/>
-        <part name="igs_a05603w064.u6" crc="7b71c64f"/>
-        <part name="igs_a05604w032.u8" crc="9452a567"/>
+        <!-- A ROM (sprite colour; scrambled) -->
+        <part>06 01000000 00000000</part>
+        <part name="a01w64m_u5.u5" crc="bbaa3df3"/>
+        <part name="a02w64m_u6.u6" crc="f8c9cd36"/>
 
-        <!-- B ROM (sprite mask) -->
-        <part>07 01000000 00000000</part>
-        <part name="igs_b05601w064.u9" crc="35c0a489"/>
-        <part name="igs_b05602w064.u11" crc="8aad3f85"/>
+        <!-- B ROM (sprite mask; scrambled) -->
+        <part>07 00800000 00000000</part>
+        <part name="b01w64m_u19.u19" crc="73f5f225"/>
 
         <!-- IGS027A INTERNAL ARM ROM: synthesized 0x188 execute-only area
              (NO_DUMP on hardware; reconstructed as MAME does) followed by the
@@ -60,7 +56,7 @@
 		<part>
 		0A 00 00 EA FE FF FF EA FE FF FF EA FE FF FF EA
 		FE FF FF EA FE FF FF EA FE FF FF EA 00 F0 9F E5
-		38 00 00 08 38 00 00 08 FE FF FF EA FE FF FF EA
+		10 00 00 08 10 00 00 08 FE FF FF EA FE FF FF EA
 		D2 00 A0 E3 00 F0 21 E1 01 40 A0 E3 06 4B 84 E2
 		FA 0C A0 E3 04 D8 80 E0 D1 00 A0 E3 00 F0 21 E1
 		F6 0C A0 E3 04 D8 80 E0 D7 00 A0 E3 00 F0 21 E1
@@ -77,19 +73,18 @@
 		13 00 A0 E3 00 F0 21 E1 04 E0 9D E4 1E FF 2F E1
 		D1 00 A0 E3 00 F0 21 E1 B8 D0 9F E5 D3 00 A0 E3
 		00 F0 21 E1 B0 D0 9F E5 B8 10 9F E5 00 00 A0 E3
-		00 00 81 E5 B0 F0 9F E5 FE FF FF EA FE FF FF EA
+		00 00 81 E5 02 F3 A0 E3 FE FF FF EA FE FF FF EA
 		FE FF FF EA FE FF FF EA FE FF FF EA FE FF FF EA
 		1E FF 2F E1 FE FF FF EA FE FF FF EA FE FF FF EA
 		FE FF FF EA FE FF FF EA FE FF FF EA FE FF FF EA
 		FE FF FF EA FE FF FF EA FE FF FF EA FE FF FF EA
 		FE FF FF EA 5C 10 9F E5
 		</part>
-        <part name="svg_igs027a_v200_china.bin" crc="72b73169"/>
+        <part name="happy6_igs027a_v100_china.bin" crc="ed530445"/>
 
         <!-- IGS027A EXTERNAL ARM ROM (encrypted; decrypted at load) -->
-        <part>0a 00800000 00000000</part>
-        <part name="epr.u26" crc="46826ec8"/>
-        <part name="epr.u36" crc="fa5f3901"/>
+        <part>0a 00400000 00000000</part>
+        <part name="v-102cn_u26.u26" crc="310510fb"/>
 	</rom>
 	<nvram index="8" size="131072"/>
 </misterromdescription>

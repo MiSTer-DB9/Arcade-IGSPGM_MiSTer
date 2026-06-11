@@ -1,6 +1,7 @@
 <misterromdescription>
-	<name>Dragon World 3 (ver. 106)</name>
-	<setname>drgw3</setname>
+	<!-- Same board behavior as Dragon World 3 (IGS025 + IGS022, MAME pgm_022_025_dw3 / init_drgw3), so it runs with the drgw3 game id. -->
+	<name>Dragon World 3 EX (ver. 101CN)</name>
+	<setname>dwex101cn</setname>
 	<rbf>IGSPGM</rbf>
 	<rotation>horizontal</rotation>
 	<mameversion>277</mameversion>
@@ -15,11 +16,8 @@
 		<dip name="Unused 2" bits="6" ids="On,Off"/>
 		<dip name="Debug" bits="7" ids="On,Off"/>
 	</switches>
-	<rom index="0" address="0x30000000" zip="pgm.zip|drgw3.zip">
-        <!-- REGION_CART_PROG_ROM = 03 / CART_TILE = 04 / CART_MUSIC = 05 -->
-        <!-- REGION_CART_A_ROM = 06 / CART_B_ROM = 07 / IGS022_ROM = 08 -->
-
-        <!-- SYSTEM INFO (game = GAME_DRGW3 = 10) -->
+	<rom index="0" address="0x30000000" zip="pgm.zip|dwex101cn.zip|dwex.zip">
+        <!-- SYSTEM INFO (game = GAME_DRGW3 = 10; dwex is drgw3-class hardware) -->
 		<part>0a 00</part>
 
         <!-- BIOS PROG -->
@@ -39,22 +37,22 @@
              SWAP16 encoding then yields the [u13,u12] layout the core expects. -->
         <part>03 00100000 00100000</part>
         <interleave output="16">
-            <part name="dw3_v106_u13.u13" crc="28284e22" map="10"/>
-            <part name="dw3_v106_u12.u12" crc="c3f6838b" map="01"/>
+            <part name="dwex_v101cn.u13" crc="66172511" map="10"/>
+            <part name="dwex_v101cn.u12" crc="4f951f42" map="01"/>
         </interleave>
 
         <!-- CART TILE -->
-        <part>04 00400000 00180000</part>
-        <part name="pgm_t0400.u18" crc="b70f3357"/>
+        <part>04 00200000 00180000</part>
+        <part name="pgm_t0400.u18" crc="9ecc950d"/>
 
         <!-- CART MUSIC -->
-        <part>05 00400000 00400000</part>
-        <part name="pgm_m0400.u1" crc="031eb9ce"/>
+        <part>05 00200000 00400000</part>
+        <part name="pgm_m0400.u1" crc="42d54fd5"/>
 
         <!-- A ROM (sprite colour) -->
-        <part>06 00800000 00000000</part>
+        <part>06 00600000 00000000</part>
         <part name="pgm_a0400.u9" crc="dd7bfd40"/>
-        <part name="pgm_a0401.u10" crc="cab6557f"/>
+        <part name="pgm_a0401.u10" crc="d36c06a4"/>
 
         <!-- B ROM (sprite mask) -->
         <part>07 00400000 00000000</part>
@@ -62,7 +60,7 @@
 
         <!-- IGS022 PROTECTION DATA (64KB -> block RAM) -->
         <part>08 00010000 00000000</part>
-        <part name="dw3_text_u15.u15" crc="03dc4fdf"/>
+        <part name="dwiii_data_u15.u15" crc="03dc4fdf"/>
 	</rom>
 	<nvram index="8" size="131072"/>
 </misterromdescription>

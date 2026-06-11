@@ -213,6 +213,9 @@ localparam CONF_STR = {
     "O[38],OSD Pause,No,Yes;",
     "O[39],Pause Dim,Yes,No;",
     "-;",
+    "O[45],Autosave Backup RAM,Off,On;",
+    "T[46],Save Backup RAM;",
+    "-;",
     "O[42:41],Savestate Slot,1,2,3,4;",
     "O[40],Autoincrement Slot,Off,On;",
     "R[43],Save state (Alt-F1);",
@@ -252,22 +255,21 @@ wire [127:0] status;
 wire  [10:0] ps2_key;
 
 wire ioctl_rom_wait;
-/*wire ioctl_hs_upload_req;
-wire ioctl_m107_upload_req;
-wire [7:0] ioctl_hs_din;
-wire [7:0] ioctl_m107_din;*/
 
 wire        ioctl_download;
 wire        ioctl_upload;
-wire        ioctl_upload_req = 0; //ioctl_hs_upload_req | ioctl_m107_upload_req;
+reg         ioctl_upload_req;
 wire  [7:0] ioctl_index;
-wire  [7:0] ioctl_upload_index;
+wire  [7:0] ioctl_upload_index = 8'd8;
 wire        ioctl_wr;
 wire        ioctl_rd;
 wire [26:0] ioctl_addr;
 wire  [7:0] ioctl_dout;
-wire  [7:0] ioctl_din = 0; // = ioctl_m107_din | ioctl_hs_din;
+wire  [7:0] ioctl_din;
 wire        ioctl_wait = ioctl_rom_wait;
+
+wire        nvram_dl = ioctl_download && (ioctl_index == 8'd8);
+wire        nvram_wr = nvram_dl && ioctl_wr && ~|ioctl_addr[26:17];
 
 wire [15:0] joystick_p1, joystick_p2, joystick_p3, joystick_p4;
 wire [7:0] analog_x_p1, analog_y_p1, analog_x_p2, analog_y_p2;
@@ -311,7 +313,14 @@ wire [21:0] gamma_bus;
 wire        direct_video;
 wire        video_rotated;
 
-wire        autosave = 0; //status[8];
+wire        autosave = status[45];
+
+reg osd_status_d, nvram_save_d;
+always @(posedge clk_sys) begin
+    osd_status_d <= OSD_STATUS;
+    nvram_save_d <= status[46];
+    ioctl_upload_req <= (autosave & OSD_STATUS & ~osd_status_d) | (status[46] & ~nvram_save_d);
+end
 
 wire        info_req;
 wire [7:0]  info_index;
@@ -341,7 +350,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
     .ioctl_download(ioctl_download),
     .ioctl_upload(ioctl_upload),
     .ioctl_upload_index(ioctl_upload_index),
-    .ioctl_upload_req(ioctl_upload_req & autosave),
+    .ioctl_upload_req(ioctl_upload_req),
     .ioctl_wr(ioctl_wr),
     .ioctl_rd(ioctl_rd),
     .ioctl_addr(ioctl_addr),
@@ -400,7 +409,7 @@ pll pll
     .outclk_1(clk_sys)
 );
 
-wire reset = RESET | status[0] | buttons[1] | rom_load_busy;
+wire reset = RESET | status[0] | buttons[1] | rom_load_busy | nvram_dl;
 
 wire [26:0] sdr_ch1_addr, sdr_ch2_addr, sdr_ch4_addr, sdr_ch5_addr;
 wire sdr_ch1_req, sdr_ch2_req, sdr_ch4_req, sdr_ch5_req;
@@ -678,6 +687,11 @@ PGM pgm_inst(
     .reset(reset),
 
     .pause(system_pause),
+
+    .nvram_wr(nvram_wr),
+    .nvram_addr(ioctl_addr[16:0]),
+    .nvram_data(ioctl_dout),
+    .nvram_q(ioctl_din),
 
     .game(board_cfg.game),
 

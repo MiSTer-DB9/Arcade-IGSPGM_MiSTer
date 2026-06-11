@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <fstream>
 #include <set>
 #include <sstream>
 
@@ -25,6 +26,10 @@ namespace
 {
 constexpr int kStateOffset = 0x3E000000;
 constexpr int kStateSize = 512 * 1024;
+
+// Battery-backed 68000 work RAM exposed as MRA nvram
+constexpr uint8_t kNvramIoctlIndex = 8;
+constexpr size_t kNvramSize = 128 * 1024;
 
 const char *RunStopReasonToString(RunStopReason reason)
 {
@@ -710,6 +715,54 @@ ControllerResult<EmptyResult> SimController::LoadState(const std::string &filena
     {
         return ControllerResult<EmptyResult>::Failure("load_state_failed", "Failed to load state: " + filename);
     }
+    return ControllerResult<EmptyResult>::Success({});
+}
+
+ControllerResult<EmptyResult> SimController::SaveNvram(const std::string &filename)
+{
+    auto initResult = EnsureInitialized();
+    if (!initResult.ok)
+        return initResult;
+
+    std::vector<uint8_t> data;
+    if (!gSimCore.ReadIOCTLData(kNvramIoctlIndex, kNvramSize, data))
+    {
+        return ControllerResult<EmptyResult>::Failure("save_nvram_failed", "Failed to read nvram from core");
+    }
+
+    std::ofstream file(filename, std::ios::binary);
+    if (!file || !file.write(reinterpret_cast<const char *>(data.data()), data.size()))
+    {
+        return ControllerResult<EmptyResult>::Failure("save_nvram_failed", "Failed to write nvram file: " + filename);
+    }
+
+    return ControllerResult<EmptyResult>::Success({});
+}
+
+ControllerResult<EmptyResult> SimController::LoadNvram(const std::string &filename)
+{
+    auto initResult = EnsureInitialized();
+    if (!initResult.ok)
+        return initResult;
+
+    std::ifstream file(filename, std::ios::binary);
+    if (!file)
+    {
+        return ControllerResult<EmptyResult>::Failure("load_nvram_failed", "Failed to open nvram file: " + filename);
+    }
+
+    std::vector<uint8_t> data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    if (data.empty() || data.size() > kNvramSize)
+    {
+        return ControllerResult<EmptyResult>::Failure("load_nvram_failed",
+                                                      "Invalid nvram file size: " + std::to_string(data.size()));
+    }
+
+    if (!gSimCore.SendIOCTLData(kNvramIoctlIndex, data))
+    {
+        return ControllerResult<EmptyResult>::Failure("load_nvram_failed", "Failed to send nvram to core");
+    }
+
     return ControllerResult<EmptyResult>::Success({});
 }
 

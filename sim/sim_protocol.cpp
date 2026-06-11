@@ -1118,6 +1118,22 @@ std::string SimProtocol::HandleLine(const std::string &line)
         auto result = mController.LoadState(filename);
         return SerializeJson(WrapControllerResult(id, result, JsonValue::Object({})));
     }
+    if (method == "nvram.save")
+    {
+        std::string filename;
+        if (!RequireObjectField(params, "filename", field, error) || !RequireString(*field, "filename", filename, error))
+            return SerializeJson(MakeErrorResponse(id, "bad_request", error));
+        auto result = mController.SaveNvram(filename);
+        return SerializeJson(WrapControllerResult(id, result, JsonValue::Object({})));
+    }
+    if (method == "nvram.load")
+    {
+        std::string filename;
+        if (!RequireObjectField(params, "filename", field, error) || !RequireString(*field, "filename", filename, error))
+            return SerializeJson(MakeErrorResponse(id, "bad_request", error));
+        auto result = mController.LoadNvram(filename);
+        return SerializeJson(WrapControllerResult(id, result, JsonValue::Object({})));
+    }
     if (method == "trace.start")
     {
         std::string filename;

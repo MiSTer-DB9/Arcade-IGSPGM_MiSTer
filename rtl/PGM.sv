@@ -68,6 +68,11 @@ module PGM(
 
     input             pause,
 
+    input             nvram_wr,
+    input      [16:0] nvram_addr,
+    input       [7:0] nvram_data,
+    output      [7:0] nvram_q,
+
     input             cart_present,
     input      [23:0] cart_prog_base,
     input      [23:0] cart_tile_base,
@@ -556,13 +561,22 @@ wire [15:0] workram_data, workram_q;
 
 wire workram_dma = ~cpu_bgack_n;
 
-m68k_ram #(.WIDTHAD(16)) work_ram(
+wire [15:0] nvram_q_word;
+assign nvram_q = nvram_addr[0] ? nvram_q_word[7:0] : nvram_q_word[15:8];
+
+m68k_ram_dp #(.WIDTHAD(16)) work_ram(
     .clock(clk),
-    .address(workram_addr),
-    .we_lds_n(workram_lds_n),
-    .we_uds_n(workram_uds_n),
-    .data(workram_data),
-    .q(workram_q)
+    .address_a(workram_addr),
+    .we_lds_n_a(workram_lds_n),
+    .we_uds_n_a(workram_uds_n),
+    .data_a(workram_data),
+    .q_a(workram_q),
+
+    .address_b(nvram_addr[16:1]),
+    .we_uds_n_b(~(nvram_wr & ~nvram_addr[0])), // even byte addr = D15:8 (68k byte order)
+    .we_lds_n_b(~(nvram_wr & nvram_addr[0])),
+    .data_b({nvram_data, nvram_data}),
+    .q_b(nvram_q_word)
 );
 
 m68k_ram_ss_adaptor #(.WIDTHAD(16), .SS_IDX(SSIDX_WORK_RAM)) workram_ss(
@@ -896,7 +910,7 @@ wire arm_type2 = (game == GAME_KOV2)  || (game == GAME_KOV2P)   || (game == GAME
                  (game == GAME_MARTMAST) || (game == GAME_DW2001) || (game == GAME_DWPC);
 // IGS027A type3 (55857G): dmnfrnt/theglad.  68k share 0x500000 (double-buffered),
 // latch 0x5c0300, ARM FIQ pulse on 68k write to 0x5c0000.
-wire arm_type3 = (game == GAME_DMNFRNT) || (game == GAME_THEGLAD) || (game == GAME_SVG);
+wire arm_type3 = (game == GAME_DMNFRNT) || (game == GAME_THEGLAD) || (game == GAME_SVG) || (game == GAME_KILLBLDP) || (game == GAME_HAPPY6);
 // IGS027A type1 CAVE (ket/espgal/ddp3): recreated internal ROM, latch-only, 20 MHz,
 // no external ARM ROM (arm_has_exrom stays 0 via the type2/3-only definition below).
 wire arm_type1_cave = (game == GAME_KET) || (game == GAME_ESPGAL) || (game == GAME_DDP3);
@@ -986,6 +1000,7 @@ igs022 #(
 //   20 MHz (2/5)  : type1 (kovsh/photoy2k), type2/3 base parts (55857E/F/G)
 //   22 MHz (11/25): martmast/dw2001/dwpc (type2), dmnfrnt/theglad (type3)
 //   24 MHz (12/25): dmnfrntpcb/happy6 (type3)
+//   33.8688 MHz (506/747): killbldp (type3)
 logic [9:0] arm_cen_n, arm_cen_m;
 always_comb begin
     case (game)
@@ -995,8 +1010,12 @@ always_comb begin
         GAME_DWPC,
         GAME_DMNFRNT,
         GAME_THEGLAD: begin arm_cen_n = 10'd11; arm_cen_m = 10'd25; end // 22 MHz
+        // 24 MHz (12/25): happy6 (type3 55857G).
+        GAME_HAPPY6:  begin arm_cen_n = 10'd12; arm_cen_m = 10'd25; end // 24 MHz
         // 33 MHz (33/50): svg (type3 55857G, 33 MHz XTAL).
         GAME_SVG:     begin arm_cen_n = 10'd33; arm_cen_m = 10'd50; end // 33 MHz
+        // 33.8688 MHz: killbldp (type3 55857G). 50e6 * 506/747 = 33868808.6 Hz (+0.25 ppm).
+        GAME_KILLBLDP: begin arm_cen_n = 10'd506; arm_cen_m = 10'd747; end // 33.8688 MHz
         // 20 MHz (2/5): kovsh/photoy2k (type1), kov2/kov2p/ddp2 (type2 55857F).
         default:   begin arm_cen_n = 10'd2;  arm_cen_m = 10'd5;  end // 20 MHz
     endcase

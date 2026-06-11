@@ -68,4 +68,5 @@
 	    <part name="pgm_b0600.u5" crc="7d3cd059"/>
 	    <part name="pgm_b0601.u7" crc="a0bb1c2f"/>
 	</rom>
+	<nvram index="8" size="131072"/>
 </misterromdescription>

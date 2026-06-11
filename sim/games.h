@@ -27,6 +27,12 @@ enum Game : uint8_t
     GAME_DMNFRNT,
     GAME_THEGLAD,
     GAME_SVG,
+    GAME_KET,
+    GAME_ESPGAL,
+    GAME_DDP3,
+    GAME_KILLBLDP,
+    GAME_HAPPY6,
+    GAME_DWEX,    // loader/dispatch only: runs with the GAME_DRGW3 board id
 
     N_GAMES,
 
