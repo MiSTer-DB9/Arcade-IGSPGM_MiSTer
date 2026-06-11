@@ -684,10 +684,13 @@ module ics2115
     // Port 2: low byte of reg_read_data
     // Port 3: high byte of reg_read_data
 
-    // Port 0 status register: compute "any voice has osc IRQ pending"
-    logic any_voice_osc_irq;
+    // Port 0 status register: compute "any voice has an IRQ pending".
+    // Bit 1 must cover BOTH oscillator and volume-envelope IRQs: the PGM Z80
+    // drivers dispatch on it (`if (status & 2) -> IRQV drain loop`), and the
+    // IRQV service loop handles both sources.  
+    logic any_voice_irq;
     always_comb begin
-        any_voice_osc_irq = |osc_irq_pending;
+        any_voice_irq = |osc_irq_pending | |vol_irq_pending;
     end
 
     // IRQV auto-clear computation: combinational scan for which voice to clear
@@ -739,7 +742,7 @@ module ics2115
                     host_dout[7] = 1'b1;  // bit 7: any IRQ active
                     if (irq_enabled != 8'd0 && (irq_pending & 8'h03) != 8'h00)
                         host_dout[0] = 1'b1;  // bit 0: timer IRQ pending & enabled
-                    if (any_voice_osc_irq)
+                    if (any_voice_irq)
                         host_dout[1] = 1'b1;  // bit 1: voice osc IRQ pending
                 end
             end
@@ -762,7 +765,7 @@ module ics2115
         result = voice;
         if (high_byte) begin
             case (reg_addr[4:0])
-                5'h00: result.osc_conf[6:0]  = data[6:0];
+                5'h00: result.osc_conf       = data[7:0];
                 5'h01: result.osc_fc[15:8]   = data[7:0];
                 5'h02: result.osc_start[28:21] = data[7:0];
                 5'h03: result.osc_start[12:5]  = data[7:0];
@@ -775,7 +778,7 @@ module ics2115
                 5'h0A: result.osc_acc[28:21]   = data[7:0];
                 5'h0B: result.osc_acc[12:5]    = data[7:0];
                 5'h0C: result.vol_pan          = data[7:0];
-                5'h0D: result.vol_ctrl[6:0]    = data[6:0];
+                5'h0D: result.vol_ctrl         = data[7:0];
                 5'h10: begin
                     result.osc_ctl = data[7:0];
                 end
@@ -1012,17 +1015,21 @@ module ics2115
                         irq_pending <= ss_state_write_data[7:0];
                         irq_enabled <= ss_state_write_data[15:8];
                     end
+                    // "running with preset 0" is unrepresentable now (preset=0
+                    // stops a timer), but savestates from before that fix can
+                    // contain it; sanitize on restore so they don't re-import
+                    // a minimum-period IRQ storm.
                     SS_WORD_TIMER0_CFG: begin
                         timer_preset[0] <= ss_state_write_data[7:0];
                         timer_scale[0] <= ss_state_write_data[15:8];
-                        timer_running[0] <= ss_state_write_data[16];
+                        timer_running[0] <= ss_state_write_data[16] & |ss_state_write_data[7:0];
                     end
                     SS_WORD_TIMER0_COUNT: timer_count[0] <= ss_state_write_data[23:0];
                     SS_WORD_TIMER0_PERIOD: timer_period[0] <= ss_state_write_data[23:0];
                     SS_WORD_TIMER1_CFG: begin
                         timer_preset[1] <= ss_state_write_data[7:0];
                         timer_scale[1] <= ss_state_write_data[15:8];
-                        timer_running[1] <= ss_state_write_data[16];
+                        timer_running[1] <= ss_state_write_data[16] & |ss_state_write_data[7:0];
                     end
                     SS_WORD_TIMER1_COUNT: timer_count[1] <= ss_state_write_data[23:0];
                     SS_WORD_TIMER1_PERIOD: timer_period[1] <= ss_state_write_data[23:0];
@@ -1137,29 +1144,33 @@ module ics2115
                             endcase
                         end else begin
                             case (reg_select)
+                                // A preset of 0 STOPS the timer: the Turtle Beach
+                                // WaveFront firmware disarms timers by writing
+                                // preset=0 (including from its own IRQ handler) and
+                                // arms a deferred-service alarm with preset=1.
                                 8'h40: begin
                                     timer_preset[0] <= host_din[7:0];
                                     timer_period[0] <= (({19'd0, timer_scale[0][4:0]} + 24'd1) * ({16'd0, host_din[7:0]} + 24'd1)) << (4 + timer_scale[0][7:5]);
                                     timer_count[0]  <= (({19'd0, timer_scale[0][4:0]} + 24'd1) * ({16'd0, host_din[7:0]} + 24'd1)) << (4 + timer_scale[0][7:5]);
-                                    timer_running[0] <= 1'b1;
+                                    timer_running[0] <= |host_din[7:0];
                                 end
                                 8'h41: begin
                                     timer_preset[1] <= host_din[7:0];
                                     timer_period[1] <= (({19'd0, timer_scale[1][4:0]} + 24'd1) * ({16'd0, host_din[7:0]} + 24'd1)) << (4 + timer_scale[1][7:5]);
                                     timer_count[1]  <= (({19'd0, timer_scale[1][4:0]} + 24'd1) * ({16'd0, host_din[7:0]} + 24'd1)) << (4 + timer_scale[1][7:5]);
-                                    timer_running[1] <= 1'b1;
+                                    timer_running[1] <= |host_din[7:0];
                                 end
                                 8'h42: begin
                                     timer_scale[0] <= host_din[7:0];
                                     timer_period[0] <= (({19'd0, host_din[4:0]} + 24'd1) * ({16'd0, timer_preset[0]} + 24'd1)) << (4 + host_din[7:5]);
                                     timer_count[0]  <= (({19'd0, host_din[4:0]} + 24'd1) * ({16'd0, timer_preset[0]} + 24'd1)) << (4 + host_din[7:5]);
-                                    timer_running[0] <= 1'b1;
+                                    timer_running[0] <= |timer_preset[0];
                                 end
                                 8'h43: begin
                                     timer_scale[1] <= host_din[7:0];
                                     timer_period[1] <= (({19'd0, host_din[4:0]} + 24'd1) * ({16'd0, timer_preset[1]} + 24'd1)) << (4 + host_din[7:5]);
                                     timer_count[1]  <= (({19'd0, host_din[4:0]} + 24'd1) * ({16'd0, timer_preset[1]} + 24'd1)) << (4 + host_din[7:5]);
-                                    timer_running[1] <= 1'b1;
+                                    timer_running[1] <= |timer_preset[1];
                                 end
                                 8'h4A: irq_enabled <= host_din[7:0];
                                 8'h4F: osc_select <= host_din[4:0];
