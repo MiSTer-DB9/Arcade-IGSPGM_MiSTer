@@ -53,6 +53,7 @@ module sim_top(
     input             ioctl_wr,
     input      [26:0] ioctl_addr,
     input       [7:0] ioctl_dout,
+    output      [7:0] ioctl_din,
     output            ioctl_wait,
 
     output     [15:0] audio_out,
@@ -179,6 +180,10 @@ always_ff @(posedge clk) begin
     end
 end
 
+// Battery-backed work RAM nvram path (mirrors Arcade-IGSPGM.sv, index 8)
+wire nvram_dl = ioctl_download && (ioctl_index == 8'd8);
+wire nvram_wr = nvram_dl && ioctl_wr && ~|ioctl_addr[26:17];
+
 // Instantiate the PGM module
 PGM pgm_inst(
     .clk_50m(clk),
@@ -251,6 +256,11 @@ PGM pgm_inst(
     .sync_fix(sync_fix),
     
     .pause(pause),
+
+    .nvram_wr(nvram_wr),
+    .nvram_addr(ioctl_addr[16:0]),
+    .nvram_data(ioctl_dout),
+    .nvram_q(ioctl_din),
 
     .mister_rtc(65'b0)
 );

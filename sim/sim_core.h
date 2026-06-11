@@ -120,6 +120,7 @@ class SimCore
     // IOCTL methods
     bool SendIOCTLData(uint8_t index, const std::vector<uint8_t> &data);
     bool SendIOCTLDataDDR(uint8_t index, uint32_t addr, const std::vector<uint8_t> &data);
+    bool ReadIOCTLData(uint8_t index, size_t size, std::vector<uint8_t> &data);
 
     // Stats
     uint64_t GetTotalTicks() const

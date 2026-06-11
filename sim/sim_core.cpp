@@ -527,6 +527,32 @@ bool SimCore::SendIOCTLDataDDR(uint8_t index, uint32_t addr, const std::vector<u
     return true;
 }
 
+bool SimCore::ReadIOCTLData(uint8_t index, size_t size, std::vector<uint8_t> &data)
+{
+    if (!mTop)
+    {
+        return false;
+    }
+
+    printf("Starting ioctl upload (index=%d, size=%zu)\n", (int)index, size);
+
+    // Reads use a dedicated RAM port, so the core keeps running. This matches
+    // the hardware upload behavior: ioctl_din continuously presents the byte
+    // at ioctl_addr.
+    mTop->ioctl_index = index;
+
+    data.resize(size);
+    for (size_t i = 0; i < size; i++)
+    {
+        mTop->ioctl_addr = i;
+        Tick(4); // registered BRAM read needs a cycle to settle
+        data[i] = mTop->ioctl_din;
+    }
+
+    printf("ioctl upload complete\n");
+    return true;
+}
+
 void SimCore::WaitForIOCTLReady()
 {
     int timeout = 1000; // Prevent infinite loops

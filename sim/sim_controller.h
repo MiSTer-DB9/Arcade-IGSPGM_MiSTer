@@ -279,6 +279,9 @@ class SimController
     ControllerResult<EmptyResult> SaveState(const std::string &filename);
     ControllerResult<EmptyResult> LoadState(const std::string &filename);
 
+    ControllerResult<EmptyResult> SaveNvram(const std::string &filename);
+    ControllerResult<EmptyResult> LoadNvram(const std::string &filename);
+
     ControllerResult<EmptyResult> StartTrace(const std::string &filename, int depth);
     ControllerResult<EmptyResult> StopTrace();
     ControllerResult<EmptyResult> StartAudioCapture(const std::string &filename);
