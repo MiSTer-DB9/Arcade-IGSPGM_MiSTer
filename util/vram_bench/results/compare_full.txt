@@ -1,0 +1,271 @@
+variant    target   window flg    sim acc/frm     hw acc/frm   delta%
+rmw        bg_vram  hline    0           80.0           48.0    66.67 *
+rmw        fg_vram  hline    0           80.0           48.0    66.67 *
+rmw        bg_vram  active   0        11792.0         7856.0    50.10 *
+rmw        fg_vram  active   0        11792.0         7856.0    50.10 *
+rmw        bg_vram  all      0        20878.4        15647.5    33.43 *
+rmw        fg_vram  all      0        20878.4        15647.5    33.43 *
+byte_r_hi  bg_vram  hline    0           64.0           48.0    33.33 *
+byte_r_hi  fg_vram  hline    0           64.0           48.0    33.33 *
+byte_r_lo  bg_vram  hline    0           64.0           48.0    33.33 *
+byte_r_lo  fg_vram  hline    0           64.0           48.0    33.33 *
+byte_w_hi  bg_vram  hline    0           64.0           48.0    33.33 *
+byte_w_hi  fg_vram  hline    0           64.0           48.0    33.33 *
+byte_w_lo  bg_vram  hline    0           64.0           48.0    33.33 *
+byte_w_lo  fg_vram  hline    0           64.0           48.0    33.33 *
+word_r     bg_vram  hline    0           64.0           48.0    33.33 *
+word_r     fg_vram  hline    0           64.0           48.0    33.33 *
+word_w     bg_vram  hline    0           64.0           48.0    33.33 *
+word_w     fg_vram  hline    0           64.0           48.0    33.33 *
+byte_r_lo  bg_vram  all      0        17520.0        13968.0    25.43 *
+byte_r_lo  fg_vram  all      0        17520.0        13968.0    25.43 *
+byte_r_hi  bg_vram  active   0         9824.0         7856.0    25.05 *
+byte_r_hi  fg_vram  active   0         9824.0         7856.0    25.05 *
+long_r     bg_vram  hline    0           80.0           64.0    25.00 *
+long_r     fg_vram  hline    0           80.0           64.0    25.00 *
+movem_r    bg_vram  active   0        14736.0        11792.0    24.97 *
+movem_r    fg_vram  active   0        14736.0        11792.0    24.97 *
+long_r     bg_vram  active   0        11792.0         9584.0    23.04 *
+long_r     fg_vram  active   0        11792.0         9584.0    23.04 *
+byte_r_lo  bg_vram  hline    1           78.4           64.0    22.50 *
+byte_r_lo  bg_vram  active   0         9584.0         7856.0    22.00 *
+byte_r_lo  fg_vram  active   0         9584.0         7856.0    22.00 *
+byte_r_hi  bg_vram  all      0        17568.0        14505.6    21.11 *
+byte_r_hi  fg_vram  all      0        17568.0        14505.6    21.11 *
+byte_r_lo  fg_vram  hline    1           78.4           65.3    20.00 *
+movem_r    bg_vram  hline    0           96.0           80.0    20.00 *
+movem_r    fg_vram  hline    0           96.0           80.0    20.00 *
+long_r     bg_vram  all      0        21918.4        18336.0    19.54 *
+long_r     fg_vram  all      0        21918.4        18336.0    19.54 *
+movem_r    bg_vram  all      0        27214.4        23088.0    17.87 *
+movem_r    fg_vram  all      0        27214.4        23088.0    17.87 *
+movem_w    bg_vram  hline    1           96.0          112.0   -14.29 *
+byte_r_hi  fg_vram  hline    1           73.6           65.1    13.11 *
+long_w     bg_vram  active   0        10800.0         9584.0    12.69 *
+long_w     fg_vram  active   0        10800.0         9584.0    12.69 *
+byte_w_hi  bg_vram  active   0         8848.0         7856.0    12.63 *
+byte_w_hi  fg_vram  active   0         8848.0         7856.0    12.63 *
+byte_w_lo  bg_vram  active   0         8848.0         7856.0    12.63 *
+byte_w_lo  fg_vram  active   0         8848.0         7856.0    12.63 *
+word_r     bg_vram  active   0         8848.0         7856.0    12.63 *
+word_r     fg_vram  active   0         8848.0         7856.0    12.63 *
+word_w     bg_vram  active   0         8848.0         7856.0    12.63 *
+word_w     fg_vram  active   0         8848.0         7856.0    12.63 *
+movem_w    bg_vram  active   0        13264.0        11792.0    12.48 *
+movem_w    fg_vram  active   0        13264.0        11792.0    12.48 *
+byte_w_lo  bg_vram  all      0        15544.0        13968.0    11.28 *
+byte_w_lo  fg_vram  all      0        15544.0        13968.0    11.28 *
+byte_r_hi  bg_vram  hline    1           72.0           64.8    11.11 *
+byte_w_hi  bg_vram  all      0        15843.2        14300.0    10.79 *
+byte_w_hi  fg_vram  all      0        15843.2        14301.3    10.78 *
+movem_w    fg_vram  all      0        26366.4        23829.9    10.64 *
+movem_w    bg_vram  all      0        26366.4        23831.7    10.64 *
+movem_w    fg_vram  hline    1           96.0          107.2   -10.45 *
+movem_w    bg_vram  all      1        32512.0        35980.8    -9.64 *
+movem_w    fg_vram  all      1        32512.0        35980.8    -9.64 *
+word_r     bg_vram  all      0        15843.2        14505.6     9.22 *
+word_r     fg_vram  all      0        15843.2        14505.6     9.22 *
+long_w     bg_vram  all      0        19841.6        18336.0     8.21 *
+long_w     fg_vram  all      0        19841.6        18336.0     8.21 *
+word_w     fg_vram  all      0        15416.0        14306.4     7.76 *
+word_w     bg_vram  all      0        15416.0        14307.2     7.75 *
+long_w     bg_vram  all      1        24756.8        26718.4    -7.34 *
+long_w     fg_vram  all      1        24756.8        26718.4    -7.34 *
+movem_w    bg_vram  active   1        16976.0        18301.6    -7.24 *
+movem_w    fg_vram  active   1        16976.0        18301.6    -7.24 *
+movem_w    fg_vram  vblank   0         3051.2         3285.1    -7.12 *
+movem_w    bg_vram  vblank   1         3051.2         3284.8    -7.11 *
+movem_w    bg_vram  vblank   0         3052.8         3285.3    -7.08 *
+movem_w    fg_vram  vblank   1         3052.8         3284.8    -7.06 *
+byte_r_hi  fg_vram  all      1        21588.8        20402.7     5.81 *
+long_w     bg_vram  active   1        13760.0        14608.0    -5.81 *
+long_w     fg_vram  active   1        13760.0        14608.0    -5.81 *
+long_w     bg_vram  vblank   0         2472.0         2624.0    -5.79 *
+long_w     bg_vram  vblank   1         2472.0         2624.0    -5.79 *
+long_w     fg_vram  vblank   0         2472.0         2624.0    -5.79 *
+long_w     fg_vram  vblank   1         2472.0         2624.0    -5.79 *
+byte_r_hi  bg_vram  all      1        21588.8        20407.2     5.79 *
+byte_r_lo  bg_vram  all      1        21248.0        20104.0     5.69 *
+byte_r_lo  fg_vram  all      1        21248.0        20104.3     5.69 *
+word_w     bg_vram  all      1        19139.2        20290.1    -5.67 *
+word_w     fg_vram  all      1        19139.2        20290.1    -5.67 *
+byte_r_lo  bg_vram  vblank   0         2192.0         2080.0     5.38 *
+byte_r_lo  fg_vram  vblank   0         2192.0         2080.0     5.38 *
+word_w     bg_vram  vblank   0         2000.0         2105.6    -5.02 *
+word_w     bg_vram  vblank   1         2000.0         2105.6    -5.02 *
+word_w     fg_vram  vblank   0         2000.0         2105.6    -5.02 *
+word_w     fg_vram  vblank   1         2000.0         2105.6    -5.02 *
+byte_r_lo  fg_vram  vblank   1         2192.0         2088.3     4.97 *
+byte_r_lo  bg_vram  vblank   1         2192.0         2089.3     4.91 *
+byte_r_hi  fg_vram  vblank   0         2208.0         2105.1     4.89 *
+byte_r_hi  bg_vram  vblank   0         2208.0         2105.9     4.85 *
+word_w     bg_vram  active   1        11152.0        11712.0    -4.78 *
+word_w     fg_vram  active   1        11152.0        11712.0    -4.78 *
+byte_r_hi  bg_vram  active   1        12320.0        11760.0     4.76 *
+byte_r_hi  fg_vram  active   1        12320.0        11760.0     4.76 *
+byte_r_lo  fg_vram  active   1        12160.0        11616.3     4.68 *
+byte_r_lo  bg_vram  active   1        12160.0        11616.5     4.68 *
+byte_r_hi  bg_vram  vblank   1         2208.0         2112.0     4.55 *
+byte_r_hi  fg_vram  vblank   1         2208.0         2112.0     4.55 *
+rmw        fg_vram  all      1        25700.8        26829.1    -4.21 *
+rmw        bg_vram  all      1        25700.8        26828.3    -4.20 *
+rmw        fg_vram  vblank   1         2544.0         2634.9    -3.45 *
+movem_r    bg_vram  hline    1          104.0          100.5     3.45 *
+rmw        bg_vram  vblank   1         2544.0         2633.9    -3.41 *
+rmw        bg_vram  active   1        14176.0        14656.0    -3.28 *
+rmw        fg_vram  active   1        14176.0        14656.0    -3.28 *
+movem_r    fg_vram  hline    1          104.0          100.8     3.17 *
+rmw        bg_vram  vblank   0         2544.0         2624.0    -3.05 *
+rmw        fg_vram  vblank   0         2544.0         2624.0    -3.05 *
+word_r     bg_vram  hline    1           64.0           65.6    -2.44 *
+movem_r    work_ram hline    0          120.0          117.3     2.27 *
+long_r     fg_vram  hline    1           80.0           81.6    -1.96 *
+long_r     bg_vram  hline    1           80.0           81.3    -1.64 *
+movem_w    work_ram hline    0          124.8          122.9     1.52 *
+movem_w    work_ram hline    1          124.8          122.9     1.52 *
+movem_r    bg_vram  all      1        34595.2        35084.3    -1.39 *
+movem_r    fg_vram  all      1        34595.2        35082.4    -1.39 *
+word_r     fg_vram  hline    1           64.0           64.8    -1.23 *
+long_r     bg_vram  all      1        26718.4        27021.9    -1.12 *
+long_r     fg_vram  all      1        26718.4        27018.1    -1.11 *
+movem_r    bg_vram  active   1        17776.0        17959.5    -1.02 *
+movem_r    fg_vram  active   1        17776.0        17958.1    -1.01 *
+rmw        bg_vram  hline    1           80.0           80.8    -0.99 *
+long_r     bg_vram  vblank   1         2624.0         2649.6    -0.97 *
+long_r     fg_vram  vblank   1         2624.0         2648.8    -0.94 *
+movem_r    work_ram hline    1          118.4          117.3     0.91 *
+long_r     bg_vram  active   1        14608.0        14737.3    -0.88 *
+word_r     bg_vram  all      1        20289.6        20466.9    -0.87 *
+word_r     fg_vram  all      1        20289.6        20462.7    -0.85 *
+long_r     fg_vram  active   1        14608.0        14732.3    -0.84 *
+movem_r    bg_vram  vblank   1         3196.8         3223.7    -0.84 *
+movem_r    fg_vram  vblank   1         3196.8         3223.2    -0.82 *
+word_r     bg_vram  active   1        11712.0        11789.3    -0.66 *
+word_r     fg_vram  active   1        11712.0        11787.5    -0.64 *
+word_r     bg_vram  vblank   1         2107.2         2116.8    -0.45
+word_r     fg_vram  vblank   1         2107.2         2116.5    -0.44
+rmw        fg_vram  hline    1           80.0           80.3    -0.33
+movem_r    bg_vram  vblank   0         3196.8         3186.7     0.32
+movem_r    fg_vram  vblank   0         3196.8         3186.7     0.32
+movem_r    work_ram vblank   1         3803.2         3794.7     0.22
+movem_r    work_ram vblank   0         3801.6         3794.7     0.18
+word_r     bg_vram  vblank   0         2108.8         2105.1     0.18
+byte_w_hi  bg_vram  vblank   0         2108.8         2105.6     0.15
+byte_w_hi  fg_vram  vblank   1         2108.8         2105.6     0.15
+word_r     fg_vram  vblank   0         2108.8         2106.1     0.13
+long_r     work_ram active   1        16686.4        16672.0     0.09
+long_r     work_ram active   0        16686.4        16672.3     0.08
+long_w     work_ram active   0        16686.4        16672.3     0.08
+long_w     work_ram active   1        16686.4        16672.3     0.08
+rmw        work_ram active   0        16686.4        16672.3     0.08
+rmw        work_ram active   1        16686.4        16672.3     0.08
+byte_w_hi  bg_vram  vblank   1         2107.2         2105.6     0.08
+byte_w_hi  fg_vram  vblank   0         2107.2         2105.9     0.06
+byte_r_lo  work_ram active   1        12822.4        12816.8     0.04
+byte_w_lo  work_ram active   0        12822.4        12816.8     0.04
+byte_r_lo  work_ram active   0        12820.8        12816.8     0.03
+byte_w_lo  work_ram active   1        12820.8        12816.8     0.03
+movem_r    work_ram active   0        21174.4        21168.0     0.03
+word_w     work_ram active   1        13000.0        12996.5     0.03
+byte_w_hi  work_ram active   1        13000.0        12996.8     0.02
+word_w     work_ram active   0        13000.0        12996.8     0.02
+movem_r    work_ram active   1        21172.8        21168.0     0.02
+byte_r_hi  work_ram active   0        13000.0        12997.6     0.02
+word_r     work_ram active   0        12998.4        12996.8     0.01
+byte_w_hi  work_ram active   0        12998.4        12997.1     0.01
+word_r     work_ram active   1        12998.4        12997.3     0.01
+byte_r_hi  work_ram active   1        12998.4        12997.6     0.01
+movem_w    work_ram all      0        45736.0        45738.4    -0.01
+movem_w    work_ram all      1        45736.0        45738.4    -0.01
+movem_r    work_ram all      0        44236.8        44238.7    -0.00
+movem_r    work_ram all      1        44236.8        44238.7    -0.00
+byte_r_hi  work_ram all      0        23064.0        23064.8    -0.00
+byte_r_hi  work_ram all      1        23064.0        23064.8    -0.00
+byte_w_hi  work_ram all      0        23064.0        23064.8    -0.00
+byte_w_hi  work_ram all      1        23064.0        23064.8    -0.00
+word_r     work_ram all      0        23064.0        23064.8    -0.00
+word_r     work_ram all      1        23064.0        23064.8    -0.00
+word_w     work_ram all      0        23064.0        23064.8    -0.00
+word_w     work_ram all      1        23064.0        23064.8    -0.00
+byte_w_lo  bg_vram  all      1        19988.8        19989.3    -0.00
+byte_w_lo  fg_vram  all      1        19988.8        19989.3    -0.00
+byte_w_hi  bg_vram  all      1        20289.6        20290.1    -0.00
+byte_w_hi  fg_vram  all      1        20289.6        20290.1    -0.00
+long_r     work_ram all      0        31747.2        31748.0    -0.00
+long_w     work_ram all      0        31747.2        31748.0    -0.00
+rmw        work_ram all      0        31747.2        31748.0    -0.00
+rmw        work_ram all      1        31747.2        31748.0    -0.00
+nomem      work_ram all      0        49064.0        49065.1    -0.00
+long_r     work_ram all      1        31747.2        31747.7    -0.00
+long_w     work_ram all      1        31747.2        31747.7    -0.00
+byte_r_lo  work_ram all      0        22676.8        22677.1    -0.00
+byte_r_lo  work_ram all      1        22676.8        22677.1    -0.00
+byte_w_lo  work_ram all      0        22676.8        22677.1    -0.00
+byte_w_lo  work_ram all      1        22676.8        22677.1    -0.00
+byte_r_hi  work_ram hline    0           80.0           80.0     0.00
+byte_r_hi  work_ram hline    1           80.0           80.0     0.00
+byte_r_hi  work_ram vblank   0         2336.0         2336.0     0.00
+byte_r_hi  work_ram vblank   1         2336.0         2336.0     0.00
+byte_r_lo  work_ram hline    0           80.0           80.0     0.00
+byte_r_lo  work_ram hline    1           80.0           80.0     0.00
+byte_r_lo  work_ram vblank   0         2304.0         2304.0     0.00
+byte_r_lo  work_ram vblank   1         2304.0         2304.0     0.00
+byte_w_hi  bg_vram  active   1        11712.0        11712.0     0.00
+byte_w_hi  bg_vram  hline    1           64.0           64.0     0.00
+byte_w_hi  fg_vram  active   1        11712.0        11712.0     0.00
+byte_w_hi  fg_vram  hline    1           64.0           64.0     0.00
+byte_w_hi  work_ram hline    0           80.0           80.0     0.00
+byte_w_hi  work_ram hline    1           80.0           80.0     0.00
+byte_w_hi  work_ram vblank   0         2336.0         2336.0     0.00
+byte_w_hi  work_ram vblank   1         2336.0         2336.0     0.00
+byte_w_lo  bg_vram  active   1        11568.0        11568.0     0.00
+byte_w_lo  bg_vram  hline    1           64.0           64.0     0.00
+byte_w_lo  bg_vram  vblank   0         2080.0         2080.0     0.00
+byte_w_lo  bg_vram  vblank   1         2080.0         2080.0     0.00
+byte_w_lo  fg_vram  active   1        11568.0        11568.0     0.00
+byte_w_lo  fg_vram  hline    1           64.0           64.0     0.00
+byte_w_lo  fg_vram  vblank   0         2080.0         2080.0     0.00
+byte_w_lo  fg_vram  vblank   1         2080.0         2080.0     0.00
+byte_w_lo  work_ram hline    0           80.0           80.0     0.00
+byte_w_lo  work_ram hline    1           80.0           80.0     0.00
+byte_w_lo  work_ram vblank   0         2304.0         2304.0     0.00
+byte_w_lo  work_ram vblank   1         2304.0         2304.0     0.00
+long_r     bg_vram  vblank   0         2624.0         2624.0     0.00
+long_r     fg_vram  vblank   0         2624.0         2624.0     0.00
+long_r     work_ram hline    0           96.0           96.0     0.00
+long_r     work_ram hline    1           96.0           96.0     0.00
+long_r     work_ram vblank   0         2992.0         2992.0     0.00
+long_r     work_ram vblank   1         2992.0         2992.0     0.00
+long_w     bg_vram  hline    0           64.0           64.0     0.00
+long_w     bg_vram  hline    1           80.0           80.0     0.00
+long_w     fg_vram  hline    0           64.0           64.0     0.00
+long_w     fg_vram  hline    1           80.0           80.0     0.00
+long_w     work_ram hline    0           96.0           96.0     0.00
+long_w     work_ram hline    1           96.0           96.0     0.00
+long_w     work_ram vblank   0         2992.0         2992.0     0.00
+long_w     work_ram vblank   1         2992.0         2992.0     0.00
+movem_w    bg_vram  hline    0           80.0           80.0     0.00
+movem_w    fg_vram  hline    0           80.0           80.0     0.00
+movem_w    work_ram active   0        21664.0        21664.0     0.00
+movem_w    work_ram active   1        21664.0        21664.0     0.00
+movem_w    work_ram vblank   0         3888.0         3888.0     0.00
+movem_w    work_ram vblank   1         3888.0         3888.0     0.00
+nomem      work_ram active   0        22704.0        22704.0     0.00
+nomem      work_ram hline    0          128.0          128.0     0.00
+nomem      work_ram vblank   0         4080.0         4080.0     0.00
+rmw        work_ram hline    0           96.0           96.0     0.00
+rmw        work_ram hline    1           96.0           96.0     0.00
+rmw        work_ram vblank   0         2992.0         2992.0     0.00
+rmw        work_ram vblank   1         2992.0         2992.0     0.00
+word_r     work_ram hline    0           80.0           80.0     0.00
+word_r     work_ram hline    1           80.0           80.0     0.00
+word_r     work_ram vblank   0         2336.0         2336.0     0.00
+word_r     work_ram vblank   1         2336.0         2336.0     0.00
+word_w     bg_vram  hline    1           64.0           64.0     0.00
+word_w     fg_vram  hline    1           64.0           64.0     0.00
+word_w     work_ram hline    0           80.0           80.0     0.00
+word_w     work_ram hline    1           80.0           80.0     0.00
+word_w     work_ram vblank   0         2336.0         2336.0     0.00
+word_w     work_ram vblank   1         2336.0         2336.0     0.00
+
+worst |delta| = 66.67% (tolerance 0.5%)

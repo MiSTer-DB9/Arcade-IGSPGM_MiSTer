@@ -318,7 +318,14 @@ always_ff @(posedge clk) begin
         end
     end else begin
         sdr_dly_count <= 0;
-        if (sdr_audio_req != sdr_audio_ack) begin
+        // CPU program fetch first - mirrors rtl/sdram.sv ch3-first priority
+        if (sdr_cpu_req != sdr_cpu_ack) begin
+            sdr_rw <= 1;
+            sdr_addr <= sdr_cpu_addr;
+            sdr_req <= ~sdr_req;
+            sdr_active <= 1;
+            sdr_active_ch <= 0;
+        end else if (sdr_audio_req != sdr_audio_ack) begin
             sdr_rw <= 1;
             sdr_addr <= sdr_audio_addr;
             sdr_req <= ~sdr_req;
@@ -342,12 +349,6 @@ always_ff @(posedge clk) begin
             sdr_req <= ~sdr_req;
             sdr_active <= 1;
             sdr_active_ch <= 5;
-        end else if (sdr_cpu_req != sdr_cpu_ack) begin
-            sdr_rw <= 1;
-            sdr_addr <= sdr_cpu_addr;
-            sdr_req <= ~sdr_req;
-            sdr_active <= 1;
-            sdr_active_ch <= 0;
         end else if (sdr_rom_req != sdr_rom_ack) begin
             sdr_rw <= sdr_rom_rw;
             sdr_addr <= sdr_rom_addr;

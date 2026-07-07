@@ -392,7 +392,7 @@ always_comb begin
     end
 
     buf_wr0[lb(erase_line)] = 1;
-    buf_data0[lb(erase_line)] = 0;
+    buf_data0[lb(erase_line)] = {1'b1, 1'b1, 10'h3ff};
     buf_addr0[lb(erase_line)] = scan_column;
 
     buf_addr0[lb(scan_line)] = scan_column;

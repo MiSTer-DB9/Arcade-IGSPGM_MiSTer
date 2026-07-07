@@ -454,6 +454,7 @@ wire clocks_enabled = ss_cpu_execute | ~paused;
 
 //////////////////////////////////
 //// CLOCK ENABLES
+
 jtframe_frac_cen #(2) cen_steady
 (
     .clk(clk),
