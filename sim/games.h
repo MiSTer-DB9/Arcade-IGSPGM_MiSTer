@@ -33,6 +33,8 @@ enum Game : uint8_t
     GAME_KILLBLDP,
     GAME_HAPPY6,
     GAME_DWEX,    // loader/dispatch only: runs with the GAME_DRGW3 board id
+    GAME_PUZZLI2, // IGS027A type1 (kovsh map), recreated int ROM; IRQ4 disabled in RTL
+    GAME_PSTAR,   // IGS027A type1 (kovsh map); pgm_pstar_decrypt
 
     N_GAMES,
 

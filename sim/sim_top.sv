@@ -1,5 +1,12 @@
 import system_consts::*;
 
+// Sim savestate build stamp (ASCII, mirrors MiSTer's `BUILD_DATE).  The sim has
+// no build_id.v; the Makefile may inject a date via -DSIM_SS_VERSION, else the
+// "SIM000" sentinel is used.
+`ifndef SIM_SS_VERSION
+`define SIM_SS_VERSION 64'("SIM000")
+`endif
+
 module sim_top(
     input             clk,
     input             reset,
@@ -188,7 +195,7 @@ wire nvram_dl = ioctl_download && (ioctl_index == 8'd8);
 wire nvram_wr = nvram_dl && ioctl_wr && ~|ioctl_addr[26:17];
 
 // Instantiate the PGM module
-PGM pgm_inst(
+PGM #(.SS_VERSION(`SIM_SS_VERSION)) pgm_inst(
     .clk_50m(clk),
     .reset(reset | rom_load_busy),
     .game(board_cfg.game),
@@ -208,11 +215,6 @@ PGM pgm_inst(
     .joystick_p4(joystick_p4),
     .start(start),
     .coin(coin),
-    
-    .analog_inc(analog_inc),
-    .analog_abs(analog_abs),
-    .analog_p1(analog_p1),
-    .analog_p2(analog_p2),
     
     .dipswitch(dipswitch),
     
@@ -316,7 +318,14 @@ always_ff @(posedge clk) begin
         end
     end else begin
         sdr_dly_count <= 0;
-        if (sdr_audio_req != sdr_audio_ack) begin
+        // CPU program fetch first - mirrors rtl/sdram.sv ch3-first priority
+        if (sdr_cpu_req != sdr_cpu_ack) begin
+            sdr_rw <= 1;
+            sdr_addr <= sdr_cpu_addr;
+            sdr_req <= ~sdr_req;
+            sdr_active <= 1;
+            sdr_active_ch <= 0;
+        end else if (sdr_audio_req != sdr_audio_ack) begin
             sdr_rw <= 1;
             sdr_addr <= sdr_audio_addr;
             sdr_req <= ~sdr_req;
@@ -340,12 +349,6 @@ always_ff @(posedge clk) begin
             sdr_req <= ~sdr_req;
             sdr_active <= 1;
             sdr_active_ch <= 5;
-        end else if (sdr_cpu_req != sdr_cpu_ack) begin
-            sdr_rw <= 1;
-            sdr_addr <= sdr_cpu_addr;
-            sdr_req <= ~sdr_req;
-            sdr_active <= 1;
-            sdr_active_ch <= 0;
         end else if (sdr_rom_req != sdr_rom_ack) begin
             sdr_rw <= sdr_rom_rw;
             sdr_addr <= sdr_rom_addr;

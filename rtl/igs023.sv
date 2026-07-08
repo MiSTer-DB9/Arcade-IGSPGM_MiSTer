@@ -131,13 +131,19 @@ wire [15:0] bg_y = ctrl[2];
 wire [15:0] fg_x = ctrl[6];
 wire [15:0] fg_y = ctrl[5];
 wire [15:0] ctrl_flags = ctrl[14];
-wire bg_en = 1; // ~ctrl_flags[12];
-wire fg_en = 1; // ~ctrl_flags[11];
+wire spr_en = ~ctrl_flags[13];
+wire bg_en = ~ctrl_flags[12];
+wire fg_en = ~ctrl_flags[11];
 wire dma_en = ctrl_flags[0];
 wire bus_master = ctrl_flags[10];
 
 
 reg ram_pending = 0;
+
+// Must start from AS, not the strobe-gated external CS: write strobes
+// arrive a CPU clock after AS and would make every write a clock slow.
+wire vram_as_sel = ~cpu_as_n && (cpu_addr[23:20] == 4'h9);
+reg prev_vram_as_sel;
 
 typedef enum bit[2:0]
 {
@@ -149,8 +155,32 @@ typedef enum bit[2:0]
 } ram_access_t;
 
 ram_access_t ram_access = RAM_ACCESS_DONE;
-wire vram_cpu_bus_free = (~fg_real_vram_master & ~bg_vram_master) | bus_master;
+
+reg [2:0] slot_phase = 0;                   // microcycle slot counter
+reg held_in_hole = 0;                       // held through the hole: commits
+                                            // at hole exit, ahead of BG
+reg fetch_line = 0;                         // schedule armed for this line
+// slot 0 may only be granted to a NEW request pending at the boundary -
+// never to a mid-access continuation (those take the donated slot 3)
+wire cpu_slot_grant = slot_phase[2];
+wire cpu_boundary_grant = (slot_phase == 3'd0) & (subslot < 3'd2);
+
+reg access_straggle = 0;                    // this access dispatched too late
+reg [2:0] subslot = 0;                      // ce_50m ticks into the pixel slot
+
+wire vram_hole = fg_real_vram_master | bg_headstart;
+wire cpu_high_wait = (ram_access == RAM_ACCESS_VRAM_HIGH_SETUP) ||
+                     (ram_access == RAM_ACCESS_VRAM_HIGH_HOLD);
+wire cpu_slot = fetch_line & ~vram_hole & ~bus_master &
+                (cpu_slot_grant |
+                 ((slot_phase == 3'd3) & access_straggle & cpu_high_wait) |
+                 ((slot_phase == 3'd0) & (ram_access != RAM_ACCESS_DONE)));
+
+wire vram_cpu_bus_free = (~vram_hole & ~bg_vram_master) | bus_master;
+// a straggler's odd byte waits for the donated slot 3
+wire vram_cpu_high_free = vram_cpu_bus_free & (~access_straggle | (slot_phase == 3'd3));
 reg vram_cpu_bus_free_d;
+reg vram_cpu_high_free_d;
 
 
 assign cpu_dtack_n = cpu_cs_n ? 0 : dtack_n;
@@ -181,6 +211,7 @@ always @(posedge clk) begin
             vcnt <= vcnt + 1;
             if (vcnt == 263) begin
                 vcnt <= 0;
+                fetch_line <= 0;    // vblank lines are unscheduled
             end
         end
 
@@ -188,6 +219,15 @@ always @(posedge clk) begin
             fg_read_y <= vcnt_eff[7:0] + fg_y[7:0] + 8'd1;
             fg_start_read <= 1;
             bg_read_y <= vcnt_eff[10:0] + bg_y[10:0] + 11'd1;
+            fetch_line <= 1;
+        end
+
+        // slot counter must stay 0 through the head-start (grid anchors
+        // at the hole end)
+        if (bg_headstart) begin
+            slot_phase <= 0;
+        end else if (fetch_line) begin
+            slot_phase <= slot_phase + 1'd1;
         end
 
         prev_fg_fpga_vram_master <= fg_fpga_vram_master;
@@ -198,6 +238,7 @@ end
 wire [9:0] bg_color;
 wire [14:0] bg_vram_addr;
 wire        bg_vram_master;
+wire        bg_headstart;
 wire [23:0] bg_rom_address;
 wire        bg_rom_req;
 
@@ -240,8 +281,10 @@ IGS023_FG fg(
 IGS023_BG bg(
     .clk(clk),
     .ce_pixel(ce_pixel),
+    .cpu_slot(cpu_slot),
     .start_read(bg_start_read),
     .scan_active(~(vblank | hblank)),
+    .fg_fetching(fg_real_vram_master),
     .x(bg_x[10:0]),
     .y(bg_read_y),
     .screen_y(vcnt_eff[7:0]),
@@ -254,6 +297,7 @@ IGS023_BG bg(
     .vram_addr(bg_vram_addr),
     .vram_din(vram_din),
     .vram_master(bg_vram_master),
+    .headstart(bg_headstart),
     .rom_address(bg_rom_address),
     .rom_data(tile_rom_data),
     .rom_req(bg_rom_req),
@@ -316,14 +360,14 @@ always_ff @(posedge clk) begin
         
         if (fg_valid)
             color_addr <= 13'h1000 + { 3'd0, fg_color[8:0], 1'b0 };
-        else if (spr_valid & spr_prio) begin
+        else if (spr_prio & spr_en)
             color_addr <= 13'h0000 + { 2'd0, sprite_color[9:0], 1'b0 };
-        end else if (bg_valid)
+        else if (bg_valid)
             color_addr <= 13'h0800 + { 2'd0, bg_color[9:0], 1'b0 };
-        else if (spr_valid & ~spr_prio) begin
+        else if (~spr_prio)
             color_addr <= 13'h0000 + { 2'd0, sprite_color[9:0], 1'b0 };
-        end else
-            color_addr <= 13'h07fe; // this seems to be the background color?
+        else
+            color_addr <= 13'h0800 + { 2'd0, bg_color[9:0], 1'b0 };
     end
 end
 
@@ -355,11 +399,13 @@ always_comb begin
     case(ram_access)
         RAM_ACCESS_DONE: begin end
         
+        // Both halves always cycle, even for byte accesses; the per-phase
+        // strobe gate keeps byte writes from committing the other half.
         RAM_ACCESS_VRAM_HIGH_SETUP,
         RAM_ACCESS_VRAM_HIGH_HOLD: begin
-            if (vram_cpu_bus_free) begin
+            if (vram_cpu_high_free) begin
                 vram_addr_raw = {cpu_addr[14:1], 1'b1};
-                vram_we_n = cpu_rw;
+                vram_we_n = cpu_rw | cpu_uds_n;
                 vram_dout = cpu_din[15:8];
             end
         end
@@ -368,7 +414,7 @@ always_comb begin
         RAM_ACCESS_VRAM_LOW_HOLD: begin
             if (vram_cpu_bus_free) begin
                 vram_addr_raw = {cpu_addr[14:1], 1'b0};
-                vram_we_n = cpu_rw;
+                vram_we_n = cpu_rw | cpu_lds_n;
                 vram_dout = cpu_din[7:0];
             end
         end
@@ -390,6 +436,8 @@ always @(posedge clk) begin
         dtack_n <= 1;
         ram_pending <= 0;
         ram_access <= RAM_ACCESS_DONE;
+        prev_vram_as_sel <= 0;
+        held_in_hole <= 0;
         dma_start <= 0;
         debug_sprite_dma_disable <= 0;
         irq6 <= 0;
@@ -398,6 +446,7 @@ always @(posedge clk) begin
     end begin
         dma_start <= 0;
         vram_cpu_bus_free_d <= reset ? 1'b0 : vram_cpu_bus_free;
+        vram_cpu_high_free_d <= reset ? 1'b0 : vram_cpu_high_free;
         
         sprite_frame_reset <= 0;
         sprite_next_line <= 0;
@@ -464,8 +513,6 @@ always @(posedge clk) begin
                     endcase
                 end
                 dtack_n <= 0;
-            end else if (is_vram_access && !debug_sprite_dma_disable) begin
-                ram_pending <= 1;
             end else if (is_pal_access) begin
                 dtack_n <= 0;
             end
@@ -473,39 +520,50 @@ always @(posedge clk) begin
             dtack_n <= 1;
         end
 
+        prev_vram_as_sel <= vram_as_sel;
+        if (vram_as_sel & ~prev_vram_as_sel & !debug_sprite_dma_disable) begin
+            ram_pending <= 1;
+        end
+
+        if (ram_pending & vram_hole) held_in_hole <= 1;
+
         if (ce_50m) begin
+            if (ce_pixel) subslot <= 0;
+            else subslot <= subslot + 1'd1;
+
             if (vram_cpu_bus_free) begin
                 case(ram_access)
                     RAM_ACCESS_DONE: begin
-                        if (ram_pending) begin
+                        if (ram_pending && (~fetch_line | bus_master | cpu_slot_grant |
+                                            cpu_boundary_grant | held_in_hole)) begin
                             ram_pending <= 0;
-                            if (~cpu_uds_n) ram_access <= RAM_ACCESS_VRAM_HIGH_SETUP;
-                            else ram_access <= RAM_ACCESS_VRAM_LOW_SETUP;
+                            ram_access <= RAM_ACCESS_VRAM_LOW_SETUP;
+                            // writes only - reads never straggle
+                            access_straggle <= fetch_line & ~bus_master & ~held_in_hole &
+                                               ~cpu_rw &
+                                               (slot_phase == 3'd7) & (subslot >= 3'd4);
+                        end
+                    end
+
+                    // Even (low) byte first, then odd - the hardware WR# order
+                    RAM_ACCESS_VRAM_LOW_HOLD: begin
+                        if (vram_cpu_bus_free_d) begin
+                            cpu_dout_reg[7:0] <= vram_din;
+                            ram_access <= RAM_ACCESS_VRAM_HIGH_SETUP;
                         end
                     end
 
                     RAM_ACCESS_VRAM_HIGH_HOLD: begin
-                        if (vram_cpu_bus_free_d) begin
+                        if (vram_cpu_high_free_d) begin
                             cpu_dout_reg[15:8] <= vram_din;
-                            if (~cpu_lds_n) begin
-                                ram_access <= RAM_ACCESS_VRAM_LOW_SETUP;
-                            end else begin
-                                ram_access <= RAM_ACCESS_DONE;
-                                dtack_n <= 0;
-                            end
-                        end
-                    end
-
-                    RAM_ACCESS_VRAM_LOW_HOLD: begin
-                        if (vram_cpu_bus_free_d) begin
-                            cpu_dout_reg[7:0] <= vram_din;
                             ram_access <= RAM_ACCESS_DONE;
                             dtack_n <= 0;
+                            held_in_hole <= 0;
                         end
                     end
 
-                    RAM_ACCESS_VRAM_HIGH_SETUP: if (vram_cpu_bus_free_d) ram_access <= RAM_ACCESS_VRAM_HIGH_HOLD;
                     RAM_ACCESS_VRAM_LOW_SETUP: if (vram_cpu_bus_free_d) ram_access <= RAM_ACCESS_VRAM_LOW_HOLD;
+                    RAM_ACCESS_VRAM_HIGH_SETUP: if (vram_cpu_high_free_d) ram_access <= RAM_ACCESS_VRAM_HIGH_HOLD;
                 endcase
             end
         end // ce_pixel

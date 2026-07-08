@@ -1,0 +1,21 @@
+{"type": "header", "platform": "sim", "frames": 20, "repeats": 1, "ts": 1783286199.217504}
+{"accesses_per_chunk": 16, "accesses_per_frame": 31749.6, "chunks": 39687, "chunks_per_frame": 1984.35, "flags": 0, "frames": 20, "platform": "sim", "samples": [39687], "sprite_count": 0, "variant": "nomem"}
+{"accesses_per_chunk": 16, "accesses_per_frame": 31724.8, "chunks": 39656, "chunks_per_frame": 1982.8, "flags": 0, "frames": 20, "platform": "sim", "samples": [39656], "sprite_count": 32, "variant": "nomem"}
+{"accesses_per_chunk": 16, "accesses_per_frame": 31700.8, "chunks": 39626, "chunks_per_frame": 1981.3, "flags": 0, "frames": 20, "platform": "sim", "samples": [39626], "sprite_count": 64, "variant": "nomem"}
+{"accesses_per_chunk": 16, "accesses_per_frame": 31652.8, "chunks": 39566, "chunks_per_frame": 1978.3, "flags": 0, "frames": 20, "platform": "sim", "samples": [39566], "sprite_count": 128, "variant": "nomem"}
+{"accesses_per_chunk": 16, "accesses_per_frame": 31580.8, "chunks": 39476, "chunks_per_frame": 1973.8, "flags": 0, "frames": 20, "platform": "sim", "samples": [39476], "sprite_count": 224, "variant": "nomem"}
+{"accesses_per_chunk": 16, "accesses_per_frame": 22678.4, "chunks": 28348, "chunks_per_frame": 1417.4, "flags": 0, "frames": 20, "platform": "sim", "samples": [28348], "sprite_count": 0, "variant": "rom_hot"}
+{"accesses_per_chunk": 16, "accesses_per_frame": 22660.8, "chunks": 28326, "chunks_per_frame": 1416.3, "flags": 0, "frames": 20, "platform": "sim", "samples": [28326], "sprite_count": 32, "variant": "rom_hot"}
+{"accesses_per_chunk": 16, "accesses_per_frame": 22644.0, "chunks": 28305, "chunks_per_frame": 1415.25, "flags": 0, "frames": 20, "platform": "sim", "samples": [28305], "sprite_count": 64, "variant": "rom_hot"}
+{"accesses_per_chunk": 16, "accesses_per_frame": 22609.6, "chunks": 28262, "chunks_per_frame": 1413.1, "flags": 0, "frames": 20, "platform": "sim", "samples": [28262], "sprite_count": 128, "variant": "rom_hot"}
+{"accesses_per_chunk": 16, "accesses_per_frame": 22557.6, "chunks": 28197, "chunks_per_frame": 1409.85, "flags": 0, "frames": 20, "platform": "sim", "samples": [28197], "sprite_count": 224, "variant": "rom_hot"}
+{"accesses_per_chunk": 16, "accesses_per_frame": 19251.2, "chunks": 24064, "chunks_per_frame": 1203.2, "flags": 0, "frames": 20, "platform": "sim", "samples": [24064], "sprite_count": 0, "variant": "rom_miss"}
+{"accesses_per_chunk": 16, "accesses_per_frame": 19211.2, "chunks": 24014, "chunks_per_frame": 1200.7, "flags": 0, "frames": 20, "platform": "sim", "samples": [24014], "sprite_count": 32, "variant": "rom_miss"}
+{"accesses_per_chunk": 16, "accesses_per_frame": 19155.2, "chunks": 23944, "chunks_per_frame": 1197.2, "flags": 0, "frames": 20, "platform": "sim", "samples": [23944], "sprite_count": 64, "variant": "rom_miss"}
+{"accesses_per_chunk": 16, "accesses_per_frame": 19048.8, "chunks": 23811, "chunks_per_frame": 1190.55, "flags": 0, "frames": 20, "platform": "sim", "samples": [23811], "sprite_count": 128, "variant": "rom_miss"}
+{"accesses_per_chunk": 16, "accesses_per_frame": 19032.8, "chunks": 23791, "chunks_per_frame": 1189.55, "flags": 0, "frames": 20, "platform": "sim", "samples": [23791], "sprite_count": 224, "variant": "rom_miss"}
+{"accesses_per_chunk": 4096, "accesses_per_frame": 20889.6, "chunks": 102, "chunks_per_frame": 5.1, "flags": 0, "frames": 20, "platform": "sim", "samples": [102], "sprite_count": 0, "variant": "rom_code"}
+{"accesses_per_chunk": 4096, "accesses_per_frame": 20684.8, "chunks": 101, "chunks_per_frame": 5.05, "flags": 0, "frames": 20, "platform": "sim", "samples": [101], "sprite_count": 32, "variant": "rom_code"}
+{"accesses_per_chunk": 4096, "accesses_per_frame": 20684.8, "chunks": 101, "chunks_per_frame": 5.05, "flags": 0, "frames": 20, "platform": "sim", "samples": [101], "sprite_count": 64, "variant": "rom_code"}
+{"accesses_per_chunk": 4096, "accesses_per_frame": 20275.2, "chunks": 99, "chunks_per_frame": 4.95, "flags": 0, "frames": 20, "platform": "sim", "samples": [99], "sprite_count": 128, "variant": "rom_code"}
+{"accesses_per_chunk": 4096, "accesses_per_frame": 20480.0, "chunks": 100, "chunks_per_frame": 5.0, "flags": 0, "frames": 20, "platform": "sim", "samples": [100], "sprite_count": 224, "variant": "rom_code"}

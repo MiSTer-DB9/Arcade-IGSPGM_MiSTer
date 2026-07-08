@@ -18,9 +18,11 @@
 module IGS023_BG(
     input clk,
     input ce_pixel,
+    input cpu_slot,
 
     input start_read,
     input scan_active,
+    input fg_fetching,
 
     input [10:0] x,
     input [10:0] y,
@@ -39,7 +41,8 @@ module IGS023_BG(
     output logic [14:0] vram_addr,
     input        [7:0]  vram_din,
     output              vram_master,
-    
+    output              headstart,
+
     // ROM interface
     output reg [23:0] rom_address,
     input      [31:0] rom_data,
@@ -76,7 +79,19 @@ typedef enum logic[4:0] {
 state_t state = DONE;
 
 reg toggle = 0;
-assign vram_master = (state <= READ3);
+// The FSM freeze below must accompany this yield - advancing while the
+// CPU owns the bus would latch the CPU's data as tile bytes.
+wire vram_reading = (state <= READ3);
+assign vram_master = vram_reading & ~cpu_slot;
+
+// Post-FG prefetch lock (the scheduler's "hole" phase 2).  Calibrated
+// against hardware: the hole must end 11.8us after sync at alignment 0.
+localparam int HEADSTART_SLOTS = 47;        // ce_pixel ticks at align 0
+
+reg [4:0] scroll_align;                     // scrolled x within the 32px tile
+reg [5:0] headstart_cnt = 0;
+reg prev_fg_fetching;
+assign headstart = |headstart_cnt;
 
 reg [14:0] scroll_addr;
 reg [15:0] scroll;
@@ -237,6 +252,7 @@ always_ff @(posedge clk) begin
             scale_shifter_x <= { scale_shifter_x[0], scale_shifter_x[31:1] };
         end
 
+        if (~(cpu_slot & vram_reading))
         case(state)
             READ_SCROLL0: begin
                 state <= READ_SCROLL1;
@@ -255,6 +271,7 @@ always_ff @(posedge clk) begin
             end
 
             APPLY_SCROLL: begin
+                scroll_align <= scrolled_x[4:0];
                 pixel_out_idx <= { 4'd1, global_flip_x ? ~scrolled_x_r[4:0] : scrolled_x[4:0] };
                 scale_shifter_x <= 0; //scale_bits_x;
                 pixel_in_idx <= 0;
@@ -354,6 +371,13 @@ always_ff @(posedge clk) begin
         load_buffer <= 0;
         state <= DONE;
     end
+
+    if (ce_pixel && headstart_cnt != 0) headstart_cnt <= headstart_cnt - 1'd1;
+
+    // load placed after the decrement so it wins on collision
+    prev_fg_fetching <= fg_fetching;
+    if (prev_fg_fetching & ~fg_fetching)
+        headstart_cnt <= 6'(HEADSTART_SLOTS) - {1'b0, scroll_align};
 
 end
 

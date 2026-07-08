@@ -38,6 +38,9 @@ This core is currently BETA. Most games work, but the core needs more testing. T
 - DoDonPachi III / Dai-Ou-Jou
 - Ketsui: Kizuna Jigoku Tachi
 - Espgaluda
+- Puzzle Star
+- Puzzli 2
+- Puzzli 2 Super
 
 ## Not yet working
 

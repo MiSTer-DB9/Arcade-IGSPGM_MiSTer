@@ -35,7 +35,7 @@ module rom_cache(
     output logic [15:0] data
 );
 
-localparam CACHE_WIDTH = 8;
+localparam CACHE_WIDTH = 11;    // 2048 x 8-byte lines = 16KB
 
 wire [22-CACHE_WIDTH:0] tag = { version, cpu_addr[22:CACHE_WIDTH+2] };
 wire [CACHE_WIDTH-1:0] index = cpu_addr[CACHE_WIDTH+1:2];
