@@ -49,6 +49,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/rom_cache.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mame_keys.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/coin_pulse.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/video_timing.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/joy_db15.sv
 
 set_global_assignment -name SYSTEMVERILOG_FILE ./rtl/ics2115/ics2115_pkg.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ./rtl/ics2115/ics2115.sv

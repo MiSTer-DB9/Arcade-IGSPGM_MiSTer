@@ -175,7 +175,6 @@ module emu
 ///////// Default values for ports not used in this core /////////
 
 assign ADC_BUS  = 'Z;
-assign USER_OUT = '1;
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 
@@ -223,6 +222,7 @@ localparam CONF_STR = {
     "-;",
     "O[38],OSD Pause,No,Yes;",
     "O[39],Pause Dim,Yes,No;",
+    "O[47],DB15 SNAC,Off,On;",
     "-;",
     "O[45],Autosave Backup RAM,Off,On;",
     "T[46],Save Backup RAM;",
@@ -282,7 +282,11 @@ wire        ioctl_wait = ioctl_rom_wait;
 wire        nvram_dl = ioctl_download && (ioctl_index == 8'd8);
 wire        nvram_wr = nvram_dl && ioctl_wr && ~|ioctl_addr[26:17];
 
-wire [15:0] joystick_p1, joystick_p2, joystick_p3, joystick_p4;
+wire [15:0] joyusb_p1, joyusb_p2;
+wire [15:0] joystick_p3, joystick_p4;
+wire [15:0] db15_j1, db15_j2;
+wire [15:0] joystick_p1 = joyusb_p1 | db15_j1;
+wire [15:0] joystick_p2 = joyusb_p2 | db15_j2;
 wire [7:0] analog_x_p1, analog_y_p1, analog_x_p2, analog_y_p2;
 wire [7:0] paddle_p1, paddle_p2;
 wire [8:0] spinner_p1, spinner_p2;
@@ -373,8 +377,8 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
     .info_req,
     .info(info_index),
 
-    .joystick_0(joystick_p1),
-    .joystick_1(joystick_p2),
+    .joystick_0(joyusb_p1),
+    .joystick_1(joyusb_p2),
     .joystick_2(joystick_p3),
     .joystick_3(joystick_p4),
 
@@ -406,6 +410,26 @@ mame_keys mame_keys(
     .p3(kb_p3),
     .p4(kb_p4),
     .pause(kb_pause)
+);
+
+// DB15 SNAC on the user port: LOAD on USER_OUT[0], CLK on USER_OUT[1],
+// serial data in on USER_IN[5]. Released (all high) when disabled.
+wire db15_en = status[47];
+wire db15_clk, db15_load;
+
+assign USER_OUT = db15_en ? {5'b11111, db15_clk, db15_load} : 7'h7f;
+
+joy_db15 #(.DIV_BITS(10)) joy_db15
+(
+    .clk(clk_sys),
+    .rst(~db15_en),
+
+    .JOY_CLK(db15_clk),
+    .JOY_LOAD(db15_load),
+    .JOY_DATA(USER_IN[5]),
+
+    .joystick1(db15_j1),
+    .joystick2(db15_j2)
 );
 
 ///////////////////////   CLOCKS   ///////////////////////////////
