@@ -231,6 +231,7 @@ localparam CONF_STR = {
     "O[40],Autoincrement Slot,Off,On;",
     "R[43],Save state (Alt-F1);",
     "R[44],Restore state (F1);",
+    "O[50:48],Auto-load Slot,Off,1,2,3,4;",
     "-;",
     "DIP;",
     "-;",
@@ -249,11 +250,14 @@ localparam CONF_STR = {
     "Save to state 3,",
     "Restore state 3,",
     "Save to state 4,",
-    "Restore state 4;",
+    "Restore state 4,",
+    "Auto-loaded Save State;",
     "DEFMRA,/_Development/PGM.mra;",
     "v,1;",
     "V,v",`BUILD_DATE
 };
+
+localparam SS_INFO_AUTOLOADED = 8'd14;
 
 localparam BTN_START = 10;
 localparam BTN_COIN = 11;
@@ -337,8 +341,11 @@ always @(posedge clk_sys) begin
     ioctl_upload_req <= (autosave & OSD_STATUS & ~osd_status_d) | (status[46] & ~nvram_save_d);
 end
 
-wire        info_req;
-wire [7:0]  info_index;
+wire        ssui_info_req;
+wire [7:0]  ssui_info;
+
+wire        info_req    = ssui_info_req | ss_autoload_info_req;
+wire [7:0]  info_index  = ss_autoload_info_req ? SS_INFO_AUTOLOADED : ssui_info;
 
 wire [127:0] status_in = { status[127:43], ss_slot, status[40:0] };
 
@@ -633,6 +640,47 @@ always_ff @(posedge clk_sys) begin
     end
 end
 
+// Auto-load savestate slot once the ROM download finishes
+wire [2:0] autoload_opt       = status[50:48];
+wire [2:0] autoload_slot_full = autoload_opt - 3'd1;
+wire [1:0] autoload_slot      = autoload_slot_full[1:0];
+
+reg       ss_autoload_armed;
+reg       ss_autoload_trig;
+reg       ss_autoload_info_req;
+
+// held until the restore state machine has run a full cycle back to idle,
+// so ss_index stays on the auto-load slot for the whole restore, not just
+// the one-cycle trigger pulse
+reg       ss_autoload_pending;
+reg       ss_autoload_seen_busy;
+
+always_ff @(posedge clk_sys) begin
+    ss_autoload_trig     <= 1'b0;
+    ss_autoload_info_req <= 1'b0;
+
+    if (~rom_load_busy & prev_rom_load_busy & |autoload_opt) begin
+        // download finished; wait for the core to actually come out of
+        // reset (nvram/dip loads etc. may still be holding it) before
+        // kicking off the restore
+        ss_autoload_armed <= 1'b1;
+    end
+
+    if (ss_autoload_armed & ~reset) begin
+        ss_autoload_armed     <= 1'b0;
+        ss_autoload_trig      <= 1'b1;
+        ss_autoload_info_req  <= 1'b1;
+        ss_autoload_pending   <= 1'b1;
+        ss_autoload_seen_busy <= 1'b0;
+    end else if (ss_autoload_pending) begin
+        if (ss_state_out != 4'd0) begin
+            ss_autoload_seen_busy <= 1'b1;
+        end else if (ss_autoload_seen_busy) begin
+            ss_autoload_pending <= 1'b0;
+        end
+    end
+end
+
 // DIP SWITCHES
 reg [7:0] dip_sw[8];    // Active-LOW
 always @(posedge clk_sys) begin
@@ -725,10 +773,10 @@ PGM #(.SS_VERSION(SS_VERSION)) pgm_inst(
 
     .ddr(ddr_f2),
 
-    .ss_index(ss_slot),
+    .ss_index(ss_autoload_pending ? autoload_slot : ss_slot),
     .ss_do_save(ss_save),
-    .ss_do_restore(ss_load),
-    .ss_state_out(),
+    .ss_do_restore(ss_load | ss_autoload_trig),
+    .ss_state_out(ss_state_out),
 
     .mister_rtc(mister_rtc),
 
@@ -831,6 +879,7 @@ video_path video_path(
 wire ss_load, ss_save;
 wire [1:0] ss_slot;
 wire ss_status_set;
+wire [3:0] ss_state_out;
 
 savestate_ui #(.INFO_TIMEOUT_BITS(25)) savestate_ui
 (
@@ -849,8 +898,8 @@ savestate_ui #(.INFO_TIMEOUT_BITS(25)) savestate_ui
     .OSD_saveload   (status[44:43]),
     .ss_save        (ss_save),
     .ss_load        (ss_load),
-    .ss_info_req    (info_req),
-    .ss_info        (info_index),
+    .ss_info_req    (ssui_info_req),
+    .ss_info        (ssui_info),
     .statusUpdate   (ss_status_set),
     .selected_slot  (ss_slot)
 );
