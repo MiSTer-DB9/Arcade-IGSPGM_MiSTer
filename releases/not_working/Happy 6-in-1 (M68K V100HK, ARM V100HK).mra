@@ -15,7 +15,7 @@
 		<dip name="Unused 1" bits="5" ids="On,Off"/>
 		<dip name="Unused 2" bits="6" ids="On,Off"/>
 		<dip name="Debug" bits="7" ids="On,Off"/>
-		<dip name="Region" bits="8,9,10,11,12,13,14,15" ids="China,Taiwan,Hong Kong,Singapore,Oversea,Don't Change" values="0,1,2,3,4,255"/>
+		<dip name="Region" bits="8,15" ids="China,Taiwan,Hong Kong,Singapore,Oversea,Don't Change" values="0,1,2,3,4,255"/>
 	</switches>
 	<rom index="0" address="0x30000000" zip="pgm.zip|happy6100hk.zip|happy6.zip">
 		<!-- SYSTEM INFO (game id = 26) -->

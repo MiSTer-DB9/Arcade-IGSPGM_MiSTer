@@ -138,12 +138,8 @@ reg spr_native_y_flip;
 wire spr_force_global_y_flip = global_flip_y & ~spr_native_y_flip;
 
 localparam FLIP_CACHE_KEY_WIDTH = 38;
-(* ramstyle = "M10K" *) reg [FLIP_CACHE_KEY_WIDTH-1:0] flip_cache_key[256];
-(* ramstyle = "M10K" *) reg [26:0] flip_cache_value[256];
-reg flip_cache_valid[256];
-reg [FLIP_CACHE_KEY_WIDTH-1:0] flip_cache_key_q;
-reg [26:0] flip_cache_value_q;
-reg flip_cache_valid_q;
+localparam FLIP_CACHE_ENTRY_WIDTH = 1 + 27 + FLIP_CACHE_KEY_WIDTH; // {valid, value, key}
+
 reg [FLIP_CACHE_KEY_WIDTH-1:0] flip_lookup_key;
 reg [7:0] flip_lookup_index;
 reg [15:0] flip_cache_hits /* verilator public_flat */ = 0;
@@ -159,6 +155,33 @@ begin
                      ^ { 2'b0, width } ^ height[7:0] ^ { 7'b0, height[8] };
 end
 endfunction
+
+// Flip-address lookup cache, backed by an explicit block-RAM primitive
+// (rtl/ram.sv) rather than a plain array: Quartus fails to infer a raw
+// array here (reports "uninferred due to asynchronous read logic" even
+// though the read is registered) because the read/write live inside this
+// module's single large FSM `always_ff`, and falls back to ~16Kbit of
+// discrete registers plus 256:1 muxes/decoders - large enough on its own
+// to blow the ALM budget. Explicit instantiation sidesteps inference.
+reg  [7:0]                        flip_cache_wr_addr;
+reg  [FLIP_CACHE_ENTRY_WIDTH-1:0] flip_cache_wr_data;
+reg                                flip_cache_wr_en;
+
+wire [7:0] flip_cache_rd_addr = flip_cache_index(spr_brom_addr, spr_width, spr_height);
+wire [7:0] flip_cache_addr = flip_cache_wr_en ? flip_cache_wr_addr : flip_cache_rd_addr;
+wire [FLIP_CACHE_ENTRY_WIDTH-1:0] flip_cache_rd_data;
+
+wire                             flip_cache_valid_q = flip_cache_rd_data[FLIP_CACHE_ENTRY_WIDTH-1];
+wire [26:0]                      flip_cache_value_q = flip_cache_rd_data[FLIP_CACHE_ENTRY_WIDTH-2:FLIP_CACHE_KEY_WIDTH];
+wire [FLIP_CACHE_KEY_WIDTH-1:0]  flip_cache_key_q   = flip_cache_rd_data[FLIP_CACHE_KEY_WIDTH-1:0];
+
+singleport_ram #(.WIDTH(FLIP_CACHE_ENTRY_WIDTH), .WIDTHAD(8)) flip_cache_ram (
+    .clock(clk),
+    .wren(flip_cache_wr_en),
+    .address(flip_cache_addr),
+    .data(flip_cache_wr_data),
+    .q(flip_cache_rd_data)
+);
 
 
 typedef struct
@@ -433,7 +456,6 @@ reg [15:0] initial_addr_low;
 // spr_* are immutable per sprite values
 // spr.* are mutable per sprite values
 always_ff @(posedge clk) begin
-    integer reset_i;
     reg [5:0] tmp_x;
     reg [15:0] tmp_shifter;
     reg [3:0] tmp_shift_count;
@@ -455,13 +477,11 @@ always_ff @(posedge clk) begin
         flip_scan_active <= 0;
         flip_cache_hits <= 0;
         flip_cache_misses <= 0;
-        for (reset_i = 0; reset_i < 256; reset_i = reset_i + 1) begin
-            flip_cache_valid[reset_i] <= 0;
-        end
     end else begin
         pixel0_wr <= 0;
         pixel1_wr <= 0;
         spr_load_d <= 0;
+        flip_cache_wr_en <= 0;
 
         if (spr_x_flip ^ spr_y_flip) begin
             pixel_column <= (spr_x + spr_scaled_width[10:0]) - (pixel_next + 2);  // TODO - truncating spr_scaled_width
@@ -577,9 +597,9 @@ always_ff @(posedge clk) begin
                 if (spr_force_global_y_flip) begin
                     flip_lookup_key <= { spr_brom_addr, spr_width, spr_height };
                     flip_lookup_index <= flip_cache_index(spr_brom_addr, spr_width, spr_height);
-                    flip_cache_key_q <= flip_cache_key[flip_cache_index(spr_brom_addr, spr_width, spr_height)];
-                    flip_cache_value_q <= flip_cache_value[flip_cache_index(spr_brom_addr, spr_width, spr_height)];
-                    flip_cache_valid_q <= flip_cache_valid[flip_cache_index(spr_brom_addr, spr_width, spr_height)];
+                    // flip_cache_rd_addr (== flip_cache_index(...) above) is presented to
+                    // flip_cache_ram this cycle; its registered output is valid next cycle,
+                    // in FLIP_CACHE_CHECK, as flip_cache_{valid,key,value}_q.
                     dma_state <= FLIP_CACHE_CHECK;
                 end else begin
                     brom_req <= ~brom_req;
@@ -666,9 +686,9 @@ always_ff @(posedge clk) begin
                     if (flip_scan_has_pixels || tmp_opaque_count != 0) begin
                         tmp_arom_offset = sub_offset(tmp_arom_offset, 5'd1);
                     end
-                    flip_cache_key[flip_lookup_index] <= flip_lookup_key;
-                    flip_cache_value[flip_lookup_index] <= tmp_arom_offset;
-                    flip_cache_valid[flip_lookup_index] <= 1;
+                    flip_cache_wr_addr <= flip_lookup_index;
+                    flip_cache_wr_data <= { 1'b1, tmp_arom_offset, flip_lookup_key };
+                    flip_cache_wr_en   <= 1'b1;
                     spr.arom_offset <= tmp_arom_offset;
                     spr_saved.arom_offset <= tmp_arom_offset;
                     spr.brom_offset <= 2;
