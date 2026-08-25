@@ -5,7 +5,7 @@
 	<rotation>horizontal</rotation>
 	<mameversion>288</mameversion>
 	<buttons default="B,A,X,Y,Start,Select,L,R" names="A,B,C,D,-,-,Start,Coin,Pause,SS"/>
-	<switches default="02ff">
+	<switches default="ff02">
 		<dip name="Service Mode" bits="0" ids="On,Off"/>
 		<dip name="Music" bits="1" ids="Off,On"/>
 		<dip name="Voice" bits="2" ids="Off,On"/>
