@@ -60,7 +60,9 @@ typedef enum bit [4:0] {
     PRESCAN_LOAD, PRESCAN_INITIAL_BROM, PRESCAN_INITIAL_BROM_WAIT, PRESCAN_INITIAL_NEXT,
     PRESCAN_NEXT, PRESCAN_SCAN_TO_START, PRESCAN_BROM_WAIT,
     DRAW_INIT, DRAW_LINE_WAIT, DRAW_SEARCH_ACTIVE_LOAD, DRAW_SEARCH_ACTIVE_CHECK,
-    DRAW_ROW, DRAW_SPAN, DRAW_ROW_END, DRAW_BROM_WAIT, SKIP_ROW, SKIP_ROW_BROM_WAIT
+    DRAW_ROW, DRAW_SPAN, DRAW_ROW_END, DRAW_BROM_WAIT, SKIP_ROW, SKIP_ROW_BROM_WAIT,
+    FLIP_CACHE_CHECK, FLIP_SCAN_INITIAL_WAIT, FLIP_SCAN_INITIAL_NEXT,
+    FLIP_SCAN_MASKS, FLIP_SCAN_BROM_WAIT, FLIP_RENDER_BROM_WAIT
 } dma_state_t;
 
 logic [31:0] scale_pattern [32] =
@@ -132,6 +134,54 @@ wire spr_x_zoom = spr_scale_x[4];
 reg [31:0] spr_x_scale_bits;
 reg [31:0] spr_y_scale_bits;
 reg [22:0] spr_brom_addr;
+reg spr_native_y_flip;
+wire spr_force_global_y_flip = global_flip_y & ~spr_native_y_flip;
+
+localparam FLIP_CACHE_KEY_WIDTH = 38;
+localparam FLIP_CACHE_ENTRY_WIDTH = 1 + 27 + FLIP_CACHE_KEY_WIDTH; // {valid, value, key}
+
+reg [FLIP_CACHE_KEY_WIDTH-1:0] flip_lookup_key;
+reg [7:0] flip_lookup_index;
+reg [15:0] flip_cache_hits /* verilator public_flat */ = 0;
+reg [15:0] flip_cache_misses /* verilator public_flat */ = 0;
+
+function automatic [7:0] flip_cache_index(
+    input [22:0] addr,
+    input [5:0] width,
+    input [8:0] height
+);
+begin
+    flip_cache_index = addr[7:0] ^ addr[15:8] ^ { 1'b0, addr[22:16] }
+                     ^ { 2'b0, width } ^ height[7:0] ^ { 7'b0, height[8] };
+end
+endfunction
+
+// Flip-address lookup cache, backed by an explicit block-RAM primitive
+// (rtl/ram.sv) rather than a plain array: Quartus fails to infer a raw
+// array here (reports "uninferred due to asynchronous read logic" even
+// though the read is registered) because the read/write live inside this
+// module's single large FSM `always_ff`, and falls back to ~16Kbit of
+// discrete registers plus 256:1 muxes/decoders - large enough on its own
+// to blow the ALM budget. Explicit instantiation sidesteps inference.
+reg  [7:0]                        flip_cache_wr_addr;
+reg  [FLIP_CACHE_ENTRY_WIDTH-1:0] flip_cache_wr_data;
+reg                                flip_cache_wr_en;
+
+wire [7:0] flip_cache_rd_addr = flip_cache_index(spr_brom_addr, spr_width, spr_height);
+wire [7:0] flip_cache_addr = flip_cache_wr_en ? flip_cache_wr_addr : flip_cache_rd_addr;
+wire [FLIP_CACHE_ENTRY_WIDTH-1:0] flip_cache_rd_data;
+
+wire                             flip_cache_valid_q = flip_cache_rd_data[FLIP_CACHE_ENTRY_WIDTH-1];
+wire [26:0]                      flip_cache_value_q = flip_cache_rd_data[FLIP_CACHE_ENTRY_WIDTH-2:FLIP_CACHE_KEY_WIDTH];
+wire [FLIP_CACHE_KEY_WIDTH-1:0]  flip_cache_key_q   = flip_cache_rd_data[FLIP_CACHE_KEY_WIDTH-1:0];
+
+singleport_ram #(.WIDTH(FLIP_CACHE_ENTRY_WIDTH), .WIDTHAD(8)) flip_cache_ram (
+    .clock(clk),
+    .wren(flip_cache_wr_en),
+    .address(flip_cache_addr),
+    .data(flip_cache_wr_data),
+    .q(flip_cache_rd_data)
+);
 
 
 typedef struct
@@ -188,10 +238,45 @@ begin
 end
 endfunction
 
+reg flip_scan_active;
+reg [15:0] flip_scan_fetch_offset;
+reg [15:0] flip_scan_offset;
+reg [14:0] flip_scan_words_left;
+reg flip_scan_has_pixels;
+arom_offset_t flip_scan_arom_offset;
+
+function automatic [22:0] flip_scan_address_for_offset(input [15:0] offset);
+begin
+    flip_scan_address_for_offset = spr_brom_addr + { 7'b0, offset };
+end
+endfunction
+
+function automatic [15:0] flip_scan_extract(input [63:0] cache, input [15:0] offset);
+begin
+    bit [22:0] addr = flip_scan_address_for_offset(offset);
+    case(addr[1:0])
+        0: flip_scan_extract = cache[15:0];
+        1: flip_scan_extract = cache[31:16];
+        2: flip_scan_extract = cache[47:32];
+        3: flip_scan_extract = cache[63:48];
+        default: flip_scan_extract = 16'd0;
+    endcase
+end
+endfunction
+
+function automatic flip_scan_is_last_in_cache(input [15:0] offset);
+begin
+    bit [22:0] addra = flip_scan_address_for_offset(offset);
+    bit [22:0] addrb = flip_scan_address_for_offset(offset + 16'd1);
+    flip_scan_is_last_in_cache = addra[2] ^ addrb[2];
+end
+endfunction
+
 
 reg brom_pf_active = 0;
 wire [15:0] brom_fetch_offset = brom_pf_active ? (spr.brom_offset + 16'd1) : spr.brom_offset;
-wire [22:0] brom_word_address = brom_address_for_offset(brom_fetch_offset);
+wire [22:0] brom_word_address = flip_scan_active ? flip_scan_address_for_offset(flip_scan_fetch_offset)
+                                                   : brom_address_for_offset(brom_fetch_offset);
 wire [22:0] brom_aligned_word_address = { brom_word_address[22:2], 2'b00 };
 assign brom_address = { brom_aligned_word_address, 1'b0 };
 
@@ -378,6 +463,9 @@ always_ff @(posedge clk) begin
 
     reg tmp_1bit;
     reg [11:0] tmp_scaled_w;
+    reg [4:0] tmp_opaque_count;
+    reg [14:0] tmp_mask_words;
+    arom_offset_t tmp_arom_offset;
 
 
     if (reset) begin
@@ -386,10 +474,14 @@ always_ff @(posedge clk) begin
         dma_state <= DMA_IDLE;
         draw_complete <= 1;
         brom_pf_active <= 0;
+        flip_scan_active <= 0;
+        flip_cache_hits <= 0;
+        flip_cache_misses <= 0;
     end else begin
         pixel0_wr <= 0;
         pixel1_wr <= 0;
         spr_load_d <= 0;
+        flip_cache_wr_en <= 0;
 
         if (spr_x_flip ^ spr_y_flip) begin
             pixel_column <= (spr_x + spr_scaled_width[10:0]) - (pixel_next + 2);  // TODO - truncating spr_scaled_width
@@ -401,6 +493,7 @@ always_ff @(posedge clk) begin
             {spr_scale_x, spr_x} <= sprite_d0[sprite_index];
             {spr_scale_y, tmp_1bit, spr_y} <= sprite_d1[sprite_index];
             {spr_y_flip, spr_x_flip, spr_palette, spr_prio, spr_brom_addr[22:16]} <= sprite_d2[sprite_index][14:0];
+            spr_native_y_flip <= sprite_d2[sprite_index][14];
             spr_brom_addr[15:0] <= sprite_d3[sprite_index];
             {spr_width, spr_height} <= sprite_d4[sprite_index][14:0];
 
@@ -483,6 +576,7 @@ always_ff @(posedge clk) begin
                 cpu_bgack_n <= 1;
                 sprite_count <= sprite_index;
                 sprite_index <= 0;
+                flip_scan_active <= 0;
                 dma_state <= PRESCAN_LOAD;
             end
 
@@ -496,12 +590,138 @@ always_ff @(posedge clk) begin
 
             PRESCAN_INITIAL_BROM: begin
                 spr.brom_offset <= 0;
-                brom_req <= ~brom_req;
                 tmp_x <= 0;
                 spr.source_line <= 0;
                 spr.screen_line <= global_flip_y ? (10'd224 - spr_y - scaled_height(spr_scale_y, scale_pattern[spr_scale_y], spr_height))
                                                  : spr_y;
-                dma_state <= PRESCAN_INITIAL_BROM_WAIT;
+                if (spr_force_global_y_flip) begin
+                    flip_lookup_key <= { spr_brom_addr, spr_width, spr_height };
+                    flip_lookup_index <= flip_cache_index(spr_brom_addr, spr_width, spr_height);
+                    // flip_cache_rd_addr (== flip_cache_index(...) above) is presented to
+                    // flip_cache_ram this cycle; its registered output is valid next cycle,
+                    // in FLIP_CACHE_CHECK, as flip_cache_{valid,key,value}_q.
+                    dma_state <= FLIP_CACHE_CHECK;
+                end else begin
+                    brom_req <= ~brom_req;
+                    dma_state <= PRESCAN_INITIAL_BROM_WAIT;
+                end
+            end
+
+            FLIP_CACHE_CHECK: begin
+                if (flip_cache_valid_q && flip_cache_key_q == flip_lookup_key) begin
+                    flip_cache_hits <= flip_cache_hits + 1'b1;
+                    spr.arom_offset <= flip_cache_value_q;
+                    spr_saved.arom_offset <= flip_cache_value_q;
+                    spr.brom_offset <= 2;
+                    spr_saved.brom_offset <= 2;
+                    brom_req <= ~brom_req;
+                    dma_state <= FLIP_RENDER_BROM_WAIT;
+                end else begin
+                    flip_cache_misses <= flip_cache_misses + 1'b1;
+                    flip_scan_active <= 1;
+                    flip_scan_fetch_offset <= 0;
+                    brom_req <= ~brom_req;
+                    dma_state <= FLIP_SCAN_INITIAL_WAIT;
+                end
+            end
+
+            FLIP_SCAN_INITIAL_WAIT: begin
+                if (brom_req == brom_ack) begin
+                    spr.brom_cache <= brom_data;
+                    initial_addr_low <= flip_scan_extract(brom_data, 0);
+                    if (flip_scan_is_last_in_cache(0)) begin
+                        flip_scan_fetch_offset <= 1;
+                        brom_req <= ~brom_req;
+                        dma_state <= FLIP_SCAN_INITIAL_NEXT;
+                    end else begin
+                        tmp_addr32 = { flip_scan_extract(brom_data, 1), flip_scan_extract(brom_data, 0) };
+                        flip_scan_arom_offset.words <= tmp_addr32[26:2];
+                        flip_scan_arom_offset.sub <= tmp_addr32[1:0];
+                        flip_scan_offset <= 2;
+                        tmp_mask_words = { 9'd0, spr_width } * { 6'd0, spr_height };
+                        flip_scan_words_left <= tmp_mask_words;
+                        flip_scan_has_pixels <= 0;
+                        if (spr_width == 0 || spr_height == 0) begin
+                            spr.active <= 0;
+                            flip_scan_active <= 0;
+                            dma_state <= PRESCAN_NEXT;
+                        end else if (flip_scan_is_last_in_cache(1)) begin
+                            flip_scan_fetch_offset <= 2;
+                            brom_req <= ~brom_req;
+                            dma_state <= FLIP_SCAN_BROM_WAIT;
+                        end else begin
+                            dma_state <= FLIP_SCAN_MASKS;
+                        end
+                    end
+                end
+            end
+
+            FLIP_SCAN_INITIAL_NEXT: begin
+                if (brom_req == brom_ack) begin
+                    spr.brom_cache <= brom_data;
+                    tmp_addr32 = { flip_scan_extract(brom_data, 1), initial_addr_low };
+                    flip_scan_arom_offset.words <= tmp_addr32[26:2];
+                    flip_scan_arom_offset.sub <= tmp_addr32[1:0];
+                    flip_scan_offset <= 2;
+                    tmp_mask_words = { 9'd0, spr_width } * { 6'd0, spr_height };
+                    flip_scan_words_left <= tmp_mask_words;
+                    flip_scan_has_pixels <= 0;
+                    if (spr_width == 0 || spr_height == 0) begin
+                        spr.active <= 0;
+                        flip_scan_active <= 0;
+                        dma_state <= PRESCAN_NEXT;
+                    end else begin
+                        dma_state <= FLIP_SCAN_MASKS;
+                    end
+                end
+            end
+
+            FLIP_SCAN_MASKS: begin
+                tmp_opaque_count = count_zeros16(flip_scan_extract(spr.brom_cache, flip_scan_offset));
+                tmp_arom_offset = add_offset(flip_scan_arom_offset, tmp_opaque_count);
+                flip_scan_arom_offset <= tmp_arom_offset;
+                flip_scan_has_pixels <= flip_scan_has_pixels | (tmp_opaque_count != 0);
+
+                if (flip_scan_words_left == 1) begin
+                    if (flip_scan_has_pixels || tmp_opaque_count != 0) begin
+                        tmp_arom_offset = sub_offset(tmp_arom_offset, 5'd1);
+                    end
+                    flip_cache_wr_addr <= flip_lookup_index;
+                    flip_cache_wr_data <= { 1'b1, tmp_arom_offset, flip_lookup_key };
+                    flip_cache_wr_en   <= 1'b1;
+                    spr.arom_offset <= tmp_arom_offset;
+                    spr_saved.arom_offset <= tmp_arom_offset;
+                    spr.brom_offset <= 2;
+                    spr_saved.brom_offset <= 2;
+                    flip_scan_active <= 0;
+                    brom_req <= ~brom_req;
+                    dma_state <= FLIP_RENDER_BROM_WAIT;
+                end else begin
+                    flip_scan_offset <= flip_scan_offset + 1'b1;
+                    flip_scan_words_left <= flip_scan_words_left - 1'b1;
+                    if (flip_scan_is_last_in_cache(flip_scan_offset)) begin
+                        flip_scan_fetch_offset <= flip_scan_offset + 1'b1;
+                        brom_req <= ~brom_req;
+                        dma_state <= FLIP_SCAN_BROM_WAIT;
+                    end
+                end
+            end
+
+            FLIP_SCAN_BROM_WAIT: begin
+                if (brom_req == brom_ack) begin
+                    spr.brom_cache <= brom_data;
+                    dma_state <= FLIP_SCAN_MASKS;
+                end
+            end
+
+            FLIP_RENDER_BROM_WAIT: begin
+                if (brom_req == brom_ack) begin
+                    spr.brom_cache <= brom_data;
+                    spr_saved.brom_cache <= brom_data;
+                    spr.active <= 1;
+                    spr.repeated <= 0;
+                    dma_state <= PRESCAN_SCAN_TO_START;
+                end
             end
 
             PRESCAN_INITIAL_BROM_WAIT: begin
