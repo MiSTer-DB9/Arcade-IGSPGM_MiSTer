@@ -497,7 +497,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
     .RTC(mister_rtc),
     // [MiSTer-DB9 BEGIN] - DB9/SNAC8 support: joy_raw for OSD navigation
-    .joy_raw(OSD_STATUS ? joy_raw_payload : 16'b0),
+    .joy_raw(joy_raw_payload),
     // programmable remap matrix selector load (UIO_DB9_MAP 0xFD)
     .db9_remap_cmd(db9_remap_cmd),
     .db9_remap_byte_cnt(db9_remap_byte_cnt),
